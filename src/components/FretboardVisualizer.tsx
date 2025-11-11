@@ -11,6 +11,8 @@ import {
   type ChordFingering,
   type ChordInstrument,
 } from '@/utils/chordFingerings';
+import { ChordPositionsGrid } from './ChordPositionsGrid';
+import { PianoChordDisplay } from './PianoChordDisplay';
 
 interface FretboardVisualizerProps {
   instrument: Instrument;
@@ -18,7 +20,7 @@ interface FretboardVisualizerProps {
   playedNotes?: string[];
   chord?: string;
   showFretNumbers?: boolean;
-  variant?: 'full' | 'compact';
+  variant?: 'full' | 'compact' | 'grid' | 'mobile'; // 'grid' shows all positions in a grid, 'mobile' shows mobile-style piano
   detectedKey?: string | null; // Optional detected key for scale display
 }
 
@@ -304,6 +306,11 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
 
   // Render based on instrument type
   if (isPiano) {
+    // Use mobile-style piano display if variant is 'mobile'
+    if (variant === 'mobile' && chord) {
+      return <PianoChordDisplay chordName={chord} showControls={true} showVoicings={true} />;
+    }
+    
     const firstNote = MidiNumbers.fromNote(variant === 'compact' ? 'c4' : 'c3');
     const lastNote = MidiNumbers.fromNote(variant === 'compact' ? 'c5' : 'c6');
     const activeNotes = notesToMidiNumbers(targetNotes.length > 0 ? targetNotes : (chord ? getChordNotes(chord) : []));
@@ -658,57 +665,67 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
 
       {/* Chord Diagram */}
       {chord && (
-        <div className="w-full flex flex-col gap-3">
-          {/* Fingering Selector - Show if multiple fingerings available */}
-          {allChordFingerings.length > 1 && (
-            <div className="flex gap-2 flex-wrap justify-center">
-              {allChordFingerings.map((fingering, index) => {
-                const isSelected = index === selectedFingeringIndex;
-                const position = fingering.baseFret || 1;
-                const positionLabel = position > 1 ? `${position}fr` : 'Open';
-                
-                return (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedFingeringIndex(index)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                      isSelected
-                        ? 'bg-teal text-white shadow-lg ring-2 ring-teal/50'
-                        : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`}
-                  >
-                    {index === 0 ? 'Most Popular' : `Position ${index + 1}`}
-                    <span className="ml-1 text-xs opacity-75">({positionLabel})</span>
-                  </button>
-                );
-              })}
+        <>
+          {variant === 'grid' && (isGuitar || isUkulele) ? (
+            <ChordPositionsGrid
+              chordName={chord}
+              instrument={isUkulele ? 'ukulele' : 'guitar'}
+              maxPositions={9}
+            />
+          ) : (
+            <div className="w-full flex flex-col gap-3">
+              {/* Fingering Selector - Show if multiple fingerings available */}
+              {allChordFingerings.length > 1 && (
+                <div className="flex gap-2 flex-wrap justify-center">
+                  {allChordFingerings.map((fingering, index) => {
+                    const isSelected = index === selectedFingeringIndex;
+                    const position = fingering.baseFret || 1;
+                    const positionLabel = position > 1 ? `${position}fr` : 'Open';
+                    
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedFingeringIndex(index)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                          isSelected
+                            ? 'bg-teal text-white shadow-lg ring-2 ring-teal/50'
+                            : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700 hover:text-white'
+                        }`}
+                      >
+                        {index === 0 ? 'Most Popular' : `Position ${index + 1}`}
+                        <span className="ml-1 text-xs opacity-75">({positionLabel})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              
+              {/* Chord Diagram Container */}
+              <div className="w-full flex justify-center relative">
+                <div
+                  ref={containerRef}
+                  className="chord-diagram"
+                  style={{
+                    width: '100%',
+                    maxWidth: '100%',
+                    minHeight: '200px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                />
+                {!chordFingering && (
+                  <div className="absolute inset-0 flex items-center justify-center text-white/60 text-xs p-2">
+                    <div className="text-center">
+                      <div className="font-semibold">{chord}</div>
+                      <div className="text-[10px] mt-1">No diagram</div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
-          
-          {/* Chord Diagram Container */}
-          <div className="w-full flex justify-center relative">
-            <div
-              ref={containerRef}
-              className="chord-diagram"
-              style={{
-                width: '100%',
-                maxWidth: '100%',
-                minHeight: '200px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            />
-            {!chordFingering && (
-              <div className="absolute inset-0 flex items-center justify-center text-white/60 text-xs p-2">
-                <div className="text-center">
-                  <div className="font-semibold">{chord}</div>
-                  <div className="text-[10px] mt-1">No diagram</div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        </>
       )}
     </motion.div>
   );

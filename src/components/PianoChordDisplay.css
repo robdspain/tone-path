@@ -1,0 +1,11 @@
+/* Piano Chord Display Styles */
+.ReactPiano__Key--active {
+  background-color: #fb923c !important; /* light orange */
+  border-color: #fb923c !important;
+}
+
+.ReactPiano__Key--active.ReactPiano__Key--accidental {
+  background-color: #ea580c !important; /* darker orange for black keys */
+  border-color: #ea580c !important;
+}
+

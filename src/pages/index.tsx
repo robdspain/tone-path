@@ -1406,6 +1406,13 @@ export default function Home() {
                         targetNotes={chordNotes}
                         chord={currentChordFrame.chord}
                         showFretNumbers={true}
+                        variant={
+                          instrument === 'piano' 
+                            ? 'mobile' 
+                            : (instrument === 'guitar' || instrument === 'ukulele') 
+                              ? 'grid' 
+                              : 'full'
+                        }
                         detectedKey={detectedKey}
                       />
                     </div>
@@ -1871,7 +1878,7 @@ export default function Home() {
                               instrument="piano"
                               targetNotes={chordNotes}
                               chord={chord.chord}
-                              variant="compact"
+                              variant="mobile"
                             />
                           </motion.div>
                         );
@@ -1997,6 +2004,7 @@ export default function Home() {
                             targetNotes={chordNotes}
                             chord={chord.chord}
                             showFretNumbers={false}
+                            variant={(instrument === 'guitar' || instrument === 'ukulele') ? 'grid' : 'full'}
                             detectedKey={detectedKey}
                           />
                         </motion.div>
