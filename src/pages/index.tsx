@@ -72,6 +72,9 @@ export default function Home() {
   const [isDetectingBPM, setIsDetectingBPM] = useState(false);
   const [isImportSectionExpanded, setIsImportSectionExpanded] = useState(true);
   const [isToolsSectionExpanded, setIsToolsSectionExpanded] = useState(false);
+  const [showToolsDropdown, setShowToolsDropdown] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<'simple-tuner' | 'tuner' | 'traditional-metronome' | 'metronome' | null>(null);
+  const toolsDropdownRef = useRef<HTMLDivElement>(null);
   const hasAnalyzedRef = useRef(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [songName, setSongName] = useState('');
@@ -81,6 +84,23 @@ export default function Home() {
   const [practiceProgress, setPracticeProgress] = useState<any[]>([]);
   const [loadedSongId, setLoadedSongId] = useState<string | null>(null);
   const [canvasView, setCanvasView] = useState<'live' | 'timeline'>('live');
+
+  // Close tools dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (toolsDropdownRef.current && !toolsDropdownRef.current.contains(event.target as Node)) {
+        setShowToolsDropdown(false);
+      }
+    };
+
+    if (showToolsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showToolsDropdown]);
 
   // Expand tools section when navigating via MobileNav
   useEffect(() => {
@@ -1038,30 +1058,140 @@ export default function Home() {
                 {status.label}
               </span>
             ))}
-          {/* Tools Menu Button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              setIsToolsSectionExpanded(!isToolsSectionExpanded);
-              // Scroll to tools section
-              setTimeout(() => {
-                const element = document.getElementById('tools');
-                if (element) {
-                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          {/* Tools Menu Button with Dropdown */}
+          <div className="relative" ref={toolsDropdownRef}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setShowToolsDropdown(!showToolsDropdown);
+                if (!isToolsSectionExpanded && !showToolsDropdown) {
+                  setIsToolsSectionExpanded(true);
+                  setTimeout(() => {
+                    const element = document.getElementById('tools');
+                    if (element) {
+                      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 100);
                 }
-              }, 100);
-            }}
-            className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all ${
-              isToolsSectionExpanded
-                ? 'bg-white text-slate-900 border-white shadow-lg'
-                : 'border-white/20 text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-            title="Practice Tools"
-          >
-            <span className="text-lg">🎵</span>
-            <span className="hidden sm:inline ml-1">Tools</span>
-          </motion.button>
+              }}
+              className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all flex items-center gap-1 ${
+                isToolsSectionExpanded || showToolsDropdown
+                  ? 'bg-white text-slate-900 border-white shadow-lg'
+                  : 'border-white/20 text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+              title="Practice Tools"
+            >
+              <span className="text-lg">🎵</span>
+              <span className="hidden sm:inline">Tools</span>
+              <motion.span
+                animate={{ rotate: showToolsDropdown ? 180 : 0 }}
+                transition={{ duration: 0.2 }}
+                className="text-xs"
+              >
+                ▼
+              </motion.span>
+            </motion.button>
+
+            {/* Dropdown Menu */}
+            {showToolsDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="absolute right-0 top-full mt-2 w-56 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden"
+              >
+                <div className="py-2">
+                  <div className="px-3 py-2 text-xs font-semibold text-white/60 uppercase tracking-wide">
+                    Tuners
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedTool('simple-tuner');
+                      setShowToolsDropdown(false);
+                      setIsToolsSectionExpanded(true);
+                      setTimeout(() => {
+                        const element = document.getElementById('tools');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }, 100);
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
+                      selectedTool === 'simple-tuner' ? 'bg-white/10 text-white' : 'text-white/80'
+                    }`}
+                  >
+                    <span>🎯</span>
+                    <span>Simple Tuner</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedTool('tuner');
+                      setShowToolsDropdown(false);
+                      setIsToolsSectionExpanded(true);
+                      setTimeout(() => {
+                        const element = document.getElementById('tools');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }, 100);
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
+                      selectedTool === 'tuner' ? 'bg-white/10 text-white' : 'text-white/80'
+                    }`}
+                  >
+                    <span>🎵</span>
+                    <span>Advanced Tuner</span>
+                  </button>
+                  
+                  <div className="border-t border-white/10 my-2" />
+                  
+                  <div className="px-3 py-2 text-xs font-semibold text-white/60 uppercase tracking-wide">
+                    Metronomes
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedTool('traditional-metronome');
+                      setShowToolsDropdown(false);
+                      setIsToolsSectionExpanded(true);
+                      setTimeout(() => {
+                        const element = document.getElementById('tools');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }, 100);
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
+                      selectedTool === 'traditional-metronome' ? 'bg-white/10 text-white' : 'text-white/80'
+                    }`}
+                  >
+                    <span>⏱️</span>
+                    <span>Traditional Metronome</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedTool('metronome');
+                      setShowToolsDropdown(false);
+                      setIsToolsSectionExpanded(true);
+                      setTimeout(() => {
+                        const element = document.getElementById('tools');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }, 100);
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
+                      selectedTool === 'metronome' ? 'bg-white/10 text-white' : 'text-white/80'
+                    }`}
+                  >
+                    <span>🎼</span>
+                    <span>Digital Metronome</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1207,35 +1337,46 @@ export default function Home() {
             className="overflow-hidden"
           >
             <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-6">
-              {/* Simple Tuner */}
-              <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Tuner</h3>
-                <SimpleTuner currentNote={currentNote} />
-              </div>
+              {/* Show selected tool or all tools if none selected */}
+              {(!selectedTool || selectedTool === 'simple-tuner') && (
+                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Simple Tuner</h3>
+                  <SimpleTuner currentNote={currentNote} />
+                </div>
+              )}
 
-              {/* Metronome */}
-              <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Metronome</h3>
-                <Metronome 
-                  initialBpm={detectedBPM || 120}
-                  onBpmChange={(bpm) => {
-                    // Sync with playback tempo if needed
-                    setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
-                  }}
-                />
-              </div>
+              {(!selectedTool || selectedTool === 'tuner') && (
+                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Advanced Tuner</h3>
+                  <Tuner currentNote={currentNote} />
+                </div>
+              )}
 
-              {/* Traditional Metronome */}
-              <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Traditional Metronome</h3>
-                <TraditionalMetronome 
-                  initialBpm={detectedBPM || 120}
-                  onBpmChange={(bpm) => {
-                    // Sync with playback tempo if needed
-                    setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
-                  }}
-                />
-              </div>
+              {(!selectedTool || selectedTool === 'traditional-metronome') && (
+                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Traditional Metronome</h3>
+                  <TraditionalMetronome 
+                    initialBpm={detectedBPM || 120}
+                    onBpmChange={(bpm) => {
+                      // Sync with playback tempo if needed
+                      setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
+                    }}
+                  />
+                </div>
+              )}
+
+              {(!selectedTool || selectedTool === 'metronome') && (
+                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Digital Metronome</h3>
+                  <Metronome 
+                    initialBpm={detectedBPM || 120}
+                    onBpmChange={(bpm) => {
+                      // Sync with playback tempo if needed
+                      setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </motion.div>
         )}
