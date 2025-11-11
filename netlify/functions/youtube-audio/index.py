@@ -4,6 +4,8 @@ import subprocess
 import tempfile
 import os
 import base64
+import sys
+import shutil
 
 def handler(event, context):
     if event.get('httpMethod') != 'POST':
@@ -30,35 +32,91 @@ def handler(event, context):
             audio_path = tmp_file.name
         
         try:
-            # Use yt-dlp to extract audio
-            # Try to find yt-dlp in common locations
+            # Try to find yt-dlp in multiple locations
+            # 1. Check Python environment's bin directory (where pip installs scripts)
+            python_bin_dir = os.path.dirname(sys.executable)
             yt_dlp_paths = [
+                os.path.join(python_bin_dir, 'yt-dlp'),  # Python environment
+                os.path.join(python_bin_dir, 'yt-dlp.exe'),  # Windows
                 '/opt/homebrew/bin/yt-dlp',  # Homebrew on Apple Silicon
                 '/usr/local/bin/yt-dlp',     # Homebrew on Intel Mac
-                'yt-dlp',                    # System PATH
+                shutil.which('yt-dlp'),      # System PATH (returns None if not found)
+                'yt-dlp',                    # Fallback: try direct command
             ]
+            
+            # Filter out None values
+            yt_dlp_paths = [p for p in yt_dlp_paths if p]
             
             yt_dlp_cmd = None
             for path in yt_dlp_paths:
-                if os.path.exists(path) or path == 'yt-dlp':
-                    yt_dlp_cmd = path
-                    break
+                if path == 'yt-dlp' or os.path.exists(path):
+                    # Test if command works
+                    try:
+                        test_result = subprocess.run(
+                            [path, '--version'],
+                            capture_output=True,
+                            timeout=5,
+                            text=True
+                        )
+                        if test_result.returncode == 0:
+                            yt_dlp_cmd = path
+                            break
+                    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                        continue
             
+            # If yt-dlp binary not found, try using yt-dlp as Python module
             if not yt_dlp_cmd:
-                return {
-                    'statusCode': 500,
-                    'body': json.dumps({'error': 'yt-dlp not found. Please install it: brew install yt-dlp'})
-                }
-            
-            # Use yt-dlp to extract audio
-            result = subprocess.run([
-                yt_dlp_cmd,
-                '-x',  # Extract audio
-                '--audio-format', 'mp3',
-                '--audio-quality', '0',  # Best quality
-                '-o', audio_path,
-                youtube_url
-            ], check=True, capture_output=True, text=True)
+                try:
+                    import yt_dlp
+                    # Use yt-dlp as Python module
+                    ydl_opts = {
+                        'format': 'bestaudio/best',
+                        'postprocessors': [{
+                            'key': 'FFmpegExtractAudio',
+                            'preferredcodec': 'mp3',
+                            'preferredquality': '192',
+                        }],
+                        'outtmpl': audio_path.replace('.mp3', '.%(ext)s'),
+                        'quiet': True,
+                        'no_warnings': True,
+                    }
+                    
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([youtube_url])
+                    
+                    # Find the actual output file (yt-dlp may add extension)
+                    if not os.path.exists(audio_path):
+                        # Look for files with similar name
+                        base_name = audio_path.replace('.mp3', '')
+                        for ext in ['.mp3', '.m4a', '.webm', '.opus']:
+                            candidate = base_name + ext
+                            if os.path.exists(candidate):
+                                audio_path = candidate
+                                break
+                    
+                    if not os.path.exists(audio_path):
+                        return {
+                            'statusCode': 500,
+                            'body': json.dumps({'error': 'Failed to extract audio file'})
+                        }
+                except ImportError:
+                    return {
+                        'statusCode': 500,
+                        'body': json.dumps({
+                            'error': 'yt-dlp not found',
+                            'message': 'Please install yt-dlp: pip install yt-dlp or brew install yt-dlp'
+                        })
+                    }
+            else:
+                # Use yt-dlp command-line tool
+                result = subprocess.run([
+                    yt_dlp_cmd,
+                    '-x',  # Extract audio
+                    '--audio-format', 'mp3',
+                    '--audio-quality', '0',  # Best quality
+                    '-o', audio_path,
+                    youtube_url
+                ], check=True, capture_output=True, text=True, timeout=300)
             
             # Read audio file
             with open(audio_path, 'rb') as f:

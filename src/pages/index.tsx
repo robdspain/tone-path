@@ -1109,8 +1109,9 @@ export default function Home() {
         <div className="flex-1 min-w-0">
           <p className="text-lg sm:text-xl font-semibold text-white truncate">Tone Path</p>
         </div>
-        {/* Essential status indicators only */}
-        <div className="flex gap-2 shrink-0">
+        {/* Right side: Status indicators and Tools menu */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Essential status indicators only */}
           {statusIndicators
             .filter((s) => s.active)
             .slice(0, 2)
@@ -1122,6 +1123,30 @@ export default function Home() {
                 {status.label}
               </span>
             ))}
+          {/* Tools Menu Button */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              setIsToolsSectionExpanded(!isToolsSectionExpanded);
+              // Scroll to tools section
+              setTimeout(() => {
+                const element = document.getElementById('tools');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }, 100);
+            }}
+            className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all ${
+              isToolsSectionExpanded
+                ? 'bg-white text-slate-900 border-white shadow-lg'
+                : 'border-white/20 text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+            title="Practice Tools"
+          >
+            <span className="text-lg">🎵</span>
+            <span className="hidden sm:inline ml-1">Tools</span>
+          </motion.button>
         </div>
       </div>
 
