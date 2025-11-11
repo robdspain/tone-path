@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(lsof:*)",
+      "WebSearch",
+      "WebFetch(domain:www.positivegrid.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,16 @@
+[build]
+  command = "pnpm build"
+  publish = ".next"
+  functions = "netlify/functions"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "18"
+  PYTHON_VERSION = "3.9"
+
+# Configure Python function runtime for youtube-audio
+[functions."youtube-audio"]
+  runtime = "python3.9"
+

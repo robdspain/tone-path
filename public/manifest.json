@@ -1,0 +1,22 @@
+{
+  "name": "Tone Path - Music Practice & Transcription",
+  "short_name": "Tone Path",
+  "description": "Real-time music transcription and practice tools for musicians",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#14a085",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+

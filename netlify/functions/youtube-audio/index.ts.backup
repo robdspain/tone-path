@@ -1,0 +1,47 @@
+// Netlify function to extract audio from YouTube
+import type { Handler } from '@netlify/functions';
+
+// Note: This is a placeholder. In production, you'll need to use yt-dlp or similar
+// For Netlify, you might need to use a Python runtime or external service
+export const handler: Handler = async (event, context) => {
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
+  }
+
+  try {
+    const { videoId } = JSON.parse(event.body || '{}');
+    
+    if (!videoId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Video ID required' }),
+      };
+    }
+
+    // TODO: Implement actual YouTube audio extraction
+    // Options:
+    // 1. Use yt-dlp via Python runtime (requires Python function)
+    // 2. Use external API service (e.g., YouTube Data API + audio extraction service)
+    // 3. Use client-side library (ytdl-core in browser - limited)
+    
+    // For now, return error with instructions
+    return {
+      statusCode: 501,
+      body: JSON.stringify({ 
+        error: 'YouTube import not yet implemented',
+        message: 'Please use a Python Netlify function with yt-dlp for audio extraction',
+        videoId 
+      }),
+    };
+  } catch (error) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Failed to process YouTube URL' }),
+    };
+  }
+};
+
+
