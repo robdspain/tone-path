@@ -8,6 +8,7 @@ import { Tuner } from '@/components/Tuner';
 import { SimpleTuner } from '@/components/SimpleTuner';
 import { Metronome } from '@/components/Metronome';
 import { TraditionalMetronome } from '@/components/TraditionalMetronome';
+import { CircleOfFifths } from '@/components/CircleOfFifths';
 import { LiveNoteDisplay } from '@/components/LiveNoteDisplay';
 import { SongNoteDisplay } from '@/components/SongNoteDisplay';
 import { saveSong, type SavedSong } from '@/utils/songStorage';
@@ -73,7 +74,7 @@ export default function Home() {
   const [isImportSectionExpanded, setIsImportSectionExpanded] = useState(true);
   const [isToolsSectionExpanded, setIsToolsSectionExpanded] = useState(false);
   const [showToolsDropdown, setShowToolsDropdown] = useState(false);
-  const [selectedTool, setSelectedTool] = useState<'simple-tuner' | 'tuner' | 'traditional-metronome' | 'metronome' | null>(null);
+  const [selectedTool, setSelectedTool] = useState<'simple-tuner' | 'tuner' | 'traditional-metronome' | 'metronome' | 'circle-of-fifths' | null>(null);
   const toolsDropdownRef = useRef<HTMLDivElement>(null);
   const hasAnalyzedRef = useRef(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -1220,6 +1221,31 @@ export default function Home() {
                     <span>🎼</span>
                     <span>Digital Metronome</span>
                   </button>
+                  
+                  <div className="border-t border-white/10 my-2" />
+                  
+                  <div className="px-3 py-2 text-xs font-semibold text-white/60 uppercase tracking-wide">
+                    Music Theory
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedTool('circle-of-fifths');
+                      setShowToolsDropdown(false);
+                      setIsToolsSectionExpanded(true);
+                      setTimeout(() => {
+                        const element = document.getElementById('tools');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }, 100);
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
+                      selectedTool === 'circle-of-fifths' ? 'bg-white/10 text-white' : 'text-white/80'
+                    }`}
+                  >
+                    <span>🎹</span>
+                    <span>Circle of Fifths</span>
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -1405,6 +1431,18 @@ export default function Home() {
                     onBpmChange={(bpm) => {
                       // Sync with playback tempo if needed
                       setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
+                    }}
+                  />
+                </div>
+              )}
+
+              {(!selectedTool || selectedTool === 'circle-of-fifths') && (
+                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Circle of Fifths</h3>
+                  <CircleOfFifths 
+                    onKeySelect={(key) => {
+                      console.log('Selected key:', key);
+                      // Could integrate with chord detection or playback
                     }}
                   />
                 </div>
