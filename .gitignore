@@ -37,3 +37,10 @@ next-env.d.ts
 # netlify
 .netlify
 
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+

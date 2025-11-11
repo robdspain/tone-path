@@ -20,13 +20,11 @@ import type { Instrument, AudioSettings, PlaybackState, NoteEvent, ChordEvent, T
 import type { TranscriptionPreset } from '@/types/presets';
 import { PracticeShell } from '@/components/layout/PracticeShell';
 import type { ChordFrame } from '@/types/chords';
-import { SmartJam } from '@/components/SmartJam';
 import { YouTubeImport } from '@/components/YouTubeImport';
 import { FileUpload } from '@/components/FileUpload';
 import { SoundCloudImport } from '@/components/SoundCloudImport';
 import { ChordStreamDisplay } from '@/components/ChordStreamDisplay';
 import { LoopController } from '@/components/LoopController';
-import { JamAIControls } from '@/components/JamAIControls';
 import { FretboardVisualizer } from '@/components/FretboardVisualizer';
 import { FeedbackHUD } from '@/components/FeedbackHUD';
 import { ProgressChart } from '@/components/ProgressChart';
@@ -82,7 +80,7 @@ export default function Home() {
   const [practiceTarget, setPracticeTarget] = useState<PracticeTarget | null>(null);
   const [practiceProgress, setPracticeProgress] = useState<any[]>([]);
   const [loadedSongId, setLoadedSongId] = useState<string | null>(null);
-  const [canvasView, setCanvasView] = useState<'live' | 'timeline' | 'jam'>('live');
+  const [canvasView, setCanvasView] = useState<'live' | 'timeline'>('live');
 
   // Expand tools section when navigating via MobileNav
   useEffect(() => {
@@ -812,7 +810,6 @@ export default function Home() {
   const viewTabs: Array<{ id: typeof canvasView; label: string; description: string }> = [
     { id: 'timeline', label: 'Timeline', description: 'Recorded/imported material' },
     { id: 'live', label: 'Live View', description: 'Microphone + instant feedback' },
-    { id: 'jam', label: 'Jam', description: 'AI accompaniment + loops' },
   ];
 
   const renderCanvasView = () => {
@@ -932,88 +929,6 @@ export default function Home() {
       );
     }
 
-    if (canvasView === 'jam') {
-      return (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6">
-            <SmartJam
-              detectedChords={detectedChords.length ? detectedChords : recordedChordEvents}
-              detectedNotes={detectedNotes.length ? detectedNotes : recordedNoteEvents}
-              tempo={playbackState.tempo}
-            />
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6">
-            <div className="mb-3">
-              <p className="text-lg font-semibold text-white">Jam Companion Controls</p>
-              <p className="text-sm text-white/60">Shape the AI band and backing textures.</p>
-            </div>
-            <JamAIControls detectedChords={detectedChords} detectedNotes={detectedNotes} />
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-lg font-semibold text-white">Imported Audio Looping</p>
-                <p className="text-sm text-white/60">
-                  Stretch, loop, and scrub through imported references.
-                </p>
-              </div>
-              {importedAudioBuffer && (
-                <span className="text-sm text-white/60">
-                  {(importedAudioPlayback.duration || 0).toFixed(1)}s
-                </span>
-              )}
-            </div>
-            {importedAudioBuffer ? (
-              <>
-                <LoopController
-                  loopStart={importedAudioPlayback.loopStart}
-                  loopEnd={importedAudioPlayback.loopEnd}
-                  isLooping={importedAudioPlayback.isLooping}
-                  duration={importedAudioPlayback.duration}
-                  tempo={importedAudioPlayback.tempo}
-                  audioBuffer={importedAudioBuffer}
-                  currentTime={importedAudioPlayback.currentTime}
-                  detectedBPM={detectedBPM}
-                  onLoopStartChange={importedAudioPlayback.setLoopStart}
-                  onLoopEndChange={importedAudioPlayback.setLoopEnd}
-                  onToggleLoop={importedAudioPlayback.toggleLoop}
-                  onTempoChange={importedAudioPlayback.setTempo}
-                  onSeek={importedAudioPlayback.seek}
-                />
-                <div className="flex flex-wrap gap-3 mt-4">
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() =>
-                      importedAudioPlayback.isPlaying
-                        ? importedAudioPlayback.pause()
-                        : importedAudioPlayback.play()
-                    }
-                    className="px-5 py-2 rounded-2xl bg-emerald-500/90 text-white font-semibold shadow-lg"
-                  >
-                    {importedAudioPlayback.isPlaying ? '⏸ Pause' : '▶ Play'}
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => importedAudioPlayback.stop()}
-                    className="px-5 py-2 rounded-2xl border border-white/20 text-white/80"
-                  >
-                    ⏹ Stop
-                  </motion.button>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-white/60">
-                Import audio from the utility rail to unlock looping controls.
-              </p>
-            )}
-          </div>
-        </div>
-      );
-    }
 
     return (
       <div className="space-y-4">
@@ -2201,7 +2116,7 @@ export default function Home() {
       )}
 
       {/* View Tabs - Mobile-friendly with larger touch targets */}
-      <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
         {viewTabs.map((tab) => (
           <button
             key={tab.id}

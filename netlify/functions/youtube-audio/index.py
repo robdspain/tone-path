@@ -69,13 +69,9 @@ def handler(event, context):
                 try:
                     import yt_dlp
                     # Use yt-dlp as Python module
+                    # Download best audio format directly (no FFmpeg needed)
                     ydl_opts = {
-                        'format': 'bestaudio/best',
-                        'postprocessors': [{
-                            'key': 'FFmpegExtractAudio',
-                            'preferredcodec': 'mp3',
-                            'preferredquality': '192',
-                        }],
+                        'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[height<=480]',
                         'outtmpl': audio_path.replace('.mp3', '.%(ext)s'),
                         'quiet': True,
                         'no_warnings': True,
@@ -88,7 +84,7 @@ def handler(event, context):
                     if not os.path.exists(audio_path):
                         # Look for files with similar name
                         base_name = audio_path.replace('.mp3', '')
-                        for ext in ['.mp3', '.m4a', '.webm', '.opus']:
+                        for ext in ['.m4a', '.webm', '.opus', '.mp3', '.mp4']:
                             candidate = base_name + ext
                             if os.path.exists(candidate):
                                 audio_path = candidate
@@ -107,6 +103,14 @@ def handler(event, context):
                             'message': 'Please install yt-dlp: pip install yt-dlp or brew install yt-dlp'
                         })
                     }
+                except Exception as e:
+                    return {
+                        'statusCode': 500,
+                        'body': json.dumps({
+                            'error': 'Failed to extract audio using yt-dlp module',
+                            'message': str(e)[:200]
+                        })
+                    }
             else:
                 # Use yt-dlp command-line tool
                 result = subprocess.run([
@@ -122,22 +126,42 @@ def handler(event, context):
             with open(audio_path, 'rb') as f:
                 audio_data = f.read()
             
+            # Determine content type based on file extension
+            ext = os.path.splitext(audio_path)[1].lower()
+            content_types = {
+                '.mp3': 'audio/mpeg',
+                '.m4a': 'audio/mp4',
+                '.webm': 'audio/webm',
+                '.opus': 'audio/opus',
+                '.mp4': 'audio/mp4',
+            }
+            content_type = content_types.get(ext, 'audio/mpeg')
+            
             # Convert to base64 for transmission
             audio_base64 = base64.b64encode(audio_data).decode('utf-8')
             
             return {
                 'statusCode': 200,
                 'headers': {
-                    'Content-Type': 'audio/mpeg',
-                    'Content-Disposition': f'attachment; filename="audio_{video_id}.mp3"'
+                    'Content-Type': content_type,
+                    'Content-Disposition': f'attachment; filename="audio_{video_id}{ext}"'
                 },
                 'body': audio_base64,
                 'isBase64Encoded': True
             }
         finally:
-            # Clean up temporary file
+            # Clean up temporary file(s)
             if os.path.exists(audio_path):
                 os.unlink(audio_path)
+            # Also clean up any files with different extensions from the same base name
+            base_name = os.path.splitext(audio_path)[0]
+            for ext in ['.m4a', '.webm', '.opus', '.mp3', '.mp4']:
+                candidate = base_name + ext
+                if os.path.exists(candidate) and candidate != audio_path:
+                    try:
+                        os.unlink(candidate)
+                    except OSError:
+                        pass
                 
     except subprocess.CalledProcessError as e:
         error_output = e.stderr if hasattr(e, 'stderr') else str(e)
