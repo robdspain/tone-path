@@ -32,44 +32,19 @@ def handler(event, context):
             audio_path = tmp_file.name
         
         try:
-            # Try to find yt-dlp in multiple locations
-            # 1. Check Python environment's bin directory (where pip installs scripts)
-            python_bin_dir = os.path.dirname(sys.executable)
-            yt_dlp_paths = [
-                os.path.join(python_bin_dir, 'yt-dlp'),  # Python environment
-                os.path.join(python_bin_dir, 'yt-dlp.exe'),  # Windows
-                '/opt/homebrew/bin/yt-dlp',  # Homebrew on Apple Silicon
-                '/usr/local/bin/yt-dlp',     # Homebrew on Intel Mac
-                shutil.which('yt-dlp'),      # System PATH (returns None if not found)
-                'yt-dlp',                    # Fallback: try direct command
-            ]
+            # Prioritize using yt-dlp as Python module (works reliably in Netlify/serverless)
+            # This is what gets installed from requirements.txt
+            use_module = False
+            try:
+                import yt_dlp
+                use_module = True
+            except ImportError:
+                pass
             
-            # Filter out None values
-            yt_dlp_paths = [p for p in yt_dlp_paths if p]
-            
-            yt_dlp_cmd = None
-            for path in yt_dlp_paths:
-                if path == 'yt-dlp' or os.path.exists(path):
-                    # Test if command works
-                    try:
-                        test_result = subprocess.run(
-                            [path, '--version'],
-                            capture_output=True,
-                            timeout=5,
-                            text=True
-                        )
-                        if test_result.returncode == 0:
-                            yt_dlp_cmd = path
-                            break
-                    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                        continue
-            
-            # If yt-dlp binary not found, try using yt-dlp as Python module
-            if not yt_dlp_cmd:
+            if use_module:
+                # Use yt-dlp as Python module (preferred for serverless environments)
+                # Download best audio format directly (no FFmpeg needed)
                 try:
-                    import yt_dlp
-                    # Use yt-dlp as Python module
-                    # Download best audio format directly (no FFmpeg needed)
                     ydl_opts = {
                         'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[height<=480]',
                         'outtmpl': audio_path.replace('.mp3', '.%(ext)s'),
@@ -95,23 +70,55 @@ def handler(event, context):
                             'statusCode': 500,
                             'body': json.dumps({'error': 'Failed to extract audio file'})
                         }
-                except ImportError:
-                    return {
-                        'statusCode': 500,
-                        'body': json.dumps({
-                            'error': 'yt-dlp not found',
-                            'message': 'Please install yt-dlp: pip install yt-dlp or brew install yt-dlp'
-                        })
-                    }
                 except Exception as e:
                     return {
                         'statusCode': 500,
                         'body': json.dumps({
                             'error': 'Failed to extract audio using yt-dlp module',
-                            'message': str(e)[:200]
+                            'message': str(e)[:500]  # Include more error details for debugging
                         })
                     }
             else:
+                # Fallback: Try to find yt-dlp binary (for local development)
+                python_bin_dir = os.path.dirname(sys.executable)
+                yt_dlp_paths = [
+                    os.path.join(python_bin_dir, 'yt-dlp'),  # Python environment
+                    os.path.join(python_bin_dir, 'yt-dlp.exe'),  # Windows
+                    '/opt/homebrew/bin/yt-dlp',  # Homebrew on Apple Silicon
+                    '/usr/local/bin/yt-dlp',     # Homebrew on Intel Mac
+                    shutil.which('yt-dlp'),      # System PATH (returns None if not found)
+                    'yt-dlp',                    # Fallback: try direct command
+                ]
+                
+                # Filter out None values
+                yt_dlp_paths = [p for p in yt_dlp_paths if p]
+                
+                yt_dlp_cmd = None
+                for path in yt_dlp_paths:
+                    if path == 'yt-dlp' or os.path.exists(path):
+                        # Test if command works
+                        try:
+                            test_result = subprocess.run(
+                                [path, '--version'],
+                                capture_output=True,
+                                timeout=5,
+                                text=True
+                            )
+                            if test_result.returncode == 0:
+                                yt_dlp_cmd = path
+                                break
+                        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                            continue
+                
+                if not yt_dlp_cmd:
+                    return {
+                        'statusCode': 500,
+                        'body': json.dumps({
+                            'error': 'yt-dlp not found',
+                            'message': 'yt-dlp must be installed. For Netlify: ensure requirements.txt includes yt-dlp. For local: pip install yt-dlp or brew install yt-dlp'
+                        })
+                    }
+                
                 # Use yt-dlp command-line tool
                 result = subprocess.run([
                     yt_dlp_cmd,

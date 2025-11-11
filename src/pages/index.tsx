@@ -1216,10 +1216,23 @@ export default function Home() {
               {/* Metronome */}
               <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Metronome</h3>
+                <Metronome 
+                  initialBpm={detectedBPM || 120}
+                  onBpmChange={(bpm) => {
+                    // Sync with playback tempo if needed
+                    setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
+                  }}
+                />
+              </div>
+
+              {/* Traditional Metronome */}
+              <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Traditional Metronome</h3>
                 <TraditionalMetronome 
                   initialBpm={detectedBPM || 120}
                   onBpmChange={(bpm) => {
-                    // Optionally sync with playback tempo
+                    // Sync with playback tempo if needed
+                    setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
                   }}
                 />
               </div>
