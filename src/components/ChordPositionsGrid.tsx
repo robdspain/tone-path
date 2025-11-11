@@ -139,8 +139,6 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
             fontFamily: 'system-ui, -apple-system, sans-serif',
             color: '#FFFFFF',
             backgroundColor: 'transparent',
-            strokeColor: '#FFFFFF',
-            strokeWidth: 2,
             fingerColor: '#FFFFFF',
             fingerSize: 0.6,
             fretSize: 1.2,
@@ -153,9 +151,9 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
             barreChordRadius: 0.25,
             emptyStringIndicatorSize: 0.5,
             fixedDiagramPosition: false,
-          });
+          } as any);
           
-          const fingers: Array<[number, number | string, string?]> = [];
+          const fingers: Array<[number, number | 'x']> = [];
           const barres: Array<{ fromString: number; toString: number; fret: number }> = [];
           
           // Process frets

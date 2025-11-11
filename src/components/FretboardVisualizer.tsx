@@ -179,8 +179,6 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
           fontFamily: 'system-ui, -apple-system, sans-serif',
           color: '#FFFFFF',
           backgroundColor: 'transparent',
-          strokeColor: '#FFFFFF',
-          strokeWidth: 2,
           fingerColor: '#FFFFFF',
           fingerSize: 0.7,
           fretSize: 1.5,
@@ -193,11 +191,11 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
           barreChordRadius: 0.3,
           emptyStringIndicatorSize: 0.6,
           fixedDiagramPosition: false,
-        });
+        } as any);
 
         // Convert chord fingering to SVGuitar format
         if (chordFingering && chordFingering.frets) {
-          const fingers: Array<[number, number | string, string?]> = [];
+          const fingers: Array<[number, number | 'x']> = [];
           const barres: Array<{ fromString: number; toString: number; fret: number }> = [];
 
           // Process frets

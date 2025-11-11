@@ -19,6 +19,10 @@ export const MobileNav = () => {
 
   const handleScrollTo = (id: string) => {
     setActiveTab(id);
+    // Update URL hash for tools section
+    if (id === 'tools') {
+      window.location.hash = 'tools';
+    }
     // Scroll to the section if it exists
     const element = document.getElementById(id);
     if (element) {

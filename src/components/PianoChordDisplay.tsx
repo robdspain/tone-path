@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Piano, MidiNumbers } from 'react-piano';
 import 'react-piano/dist/styles.css';
-import './PianoChordDisplay.css';
 
 interface PianoChordDisplayProps {
   chordName: string;

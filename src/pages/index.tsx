@@ -5,6 +5,9 @@ import { AudioVisualizer } from '@/components/AudioVisualizer';
 import { PianoRoll } from '@/components/PianoRoll';
 import { ChordProgressionGrid } from '@/components/ChordProgressionGrid';
 import { Tuner } from '@/components/Tuner';
+import { SimpleTuner } from '@/components/SimpleTuner';
+import { Metronome } from '@/components/Metronome';
+import { TraditionalMetronome } from '@/components/TraditionalMetronome';
 import { LiveNoteDisplay } from '@/components/LiveNoteDisplay';
 import { SongNoteDisplay } from '@/components/SongNoteDisplay';
 import { saveSong, type SavedSong } from '@/utils/songStorage';
@@ -70,6 +73,7 @@ export default function Home() {
   const [detectedKey, setDetectedKey] = useState<string | null>(null);
   const [isDetectingBPM, setIsDetectingBPM] = useState(false);
   const [isImportSectionExpanded, setIsImportSectionExpanded] = useState(true);
+  const [isToolsSectionExpanded, setIsToolsSectionExpanded] = useState(false);
   const hasAnalyzedRef = useRef(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [songName, setSongName] = useState('');
@@ -79,6 +83,29 @@ export default function Home() {
   const [practiceProgress, setPracticeProgress] = useState<any[]>([]);
   const [loadedSongId, setLoadedSongId] = useState<string | null>(null);
   const [canvasView, setCanvasView] = useState<'live' | 'timeline' | 'jam'>('live');
+
+  // Expand tools section when navigating via MobileNav
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === '#tools') {
+        setIsToolsSectionExpanded(true);
+        // Small delay to ensure smooth scroll
+        setTimeout(() => {
+          const element = document.getElementById('tools');
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+      }
+    };
+
+    // Check on mount
+    handleHashChange();
+
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Load preset from URL if present
   useEffect(() => {
@@ -1203,6 +1230,64 @@ export default function Home() {
         )}
       </div>
 
+      {/* Practice Tools Section - Collapsible */}
+      <div id="tools" className="rounded-3xl border border-white/10 bg-slate-900/60 overflow-hidden">
+        <div 
+          className="flex items-center justify-between p-4 sm:p-6 cursor-pointer hover:bg-slate-800/50 transition-colors"
+          onClick={() => setIsToolsSectionExpanded(!isToolsSectionExpanded)}
+        >
+          <div className="flex items-center gap-3 flex-1">
+            <motion.div
+              animate={{ rotate: isToolsSectionExpanded ? 90 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="text-white/60 text-sm"
+            >
+              ▶
+            </motion.div>
+            <div className="flex-1">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">🎵 Practice Tools</h2>
+              {!isToolsSectionExpanded && (
+                <p className="text-xs sm:text-sm text-white/60 mt-1">
+                  Tuner and Metronome • Click to expand
+                </p>
+              )}
+              {isToolsSectionExpanded && (
+                <p className="text-xs sm:text-sm text-white/60 mt-1">Essential tools for practice sessions</p>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {isToolsSectionExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-6">
+              {/* Simple Tuner */}
+              <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Tuner</h3>
+                <SimpleTuner currentNote={currentNote} />
+              </div>
+
+              {/* Metronome */}
+              <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Metronome</h3>
+                <TraditionalMetronome 
+                  initialBpm={detectedBPM || 120}
+                  onBpmChange={(bpm) => {
+                    // Optionally sync with playback tempo
+                  }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </div>
+
       {/* Visual Display of Imported Song */}
       {importedAudioBuffer && (
         <div className="rounded-3xl border border-emerald-400/40 bg-slate-900/60 p-4 sm:p-6 space-y-4">
@@ -1406,13 +1491,7 @@ export default function Home() {
                         targetNotes={chordNotes}
                         chord={currentChordFrame.chord}
                         showFretNumbers={true}
-                        variant={
-                          instrument === 'piano' 
-                            ? 'mobile' 
-                            : (instrument === 'guitar' || instrument === 'ukulele') 
-                              ? 'grid' 
-                              : 'full'
-                        }
+                        variant="grid"
                         detectedKey={detectedKey}
                       />
                     </div>

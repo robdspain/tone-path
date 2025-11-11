@@ -1,6 +1,7 @@
 import type { AppProps } from 'next/app';
 import { useEffect } from 'react';
 import '@/styles/globals.css';
+import '@/components/PianoChordDisplay.css';
 import { registerServiceWorker } from '@/utils/serviceWorker';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ThemeProvider } from '@/contexts/ThemeContext';
