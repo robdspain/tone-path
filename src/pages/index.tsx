@@ -847,12 +847,44 @@ export default function Home() {
               </span>
             </div>
             {recordedData ? (
-              <SongNoteDisplay
-                songData={recordedData}
-                currentTime={playbackState.currentTime}
-                isPlaying={isPlaying}
-                instrument={instrument}
-              />
+              <>
+                {/* Playback Controls for Recorded Data */}
+                {recordedData.events.length > 0 && (
+                  <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-slate-800/50 rounded-xl border border-white/10">
+                    <div className="flex gap-2">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handlePlay}
+                        disabled={recordedData.events.length === 0}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-sm whitespace-nowrap"
+                      >
+                        {isPlaying ? '⏸ Pause' : '▶ Play'}
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={stop}
+                        disabled={!isPlaying}
+                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-sm whitespace-nowrap"
+                      >
+                        ⏹ Stop
+                      </motion.button>
+                    </div>
+                    {duration > 0 && (
+                      <div className="text-sm text-white/60">
+                        {Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')} / {Math.floor(duration / 60)}:{(Math.floor(duration % 60)).toString().padStart(2, '0')}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <SongNoteDisplay
+                  songData={recordedData}
+                  currentTime={playbackState.currentTime}
+                  isPlaying={isPlaying}
+                  instrument={instrument}
+                />
+              </>
             ) : (
               <p className="text-sm text-white/60">
                 Record a take or load a song from the library to populate the timeline.

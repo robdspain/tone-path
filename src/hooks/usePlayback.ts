@@ -29,7 +29,11 @@ export const usePlayback = (data: TranscriptionData | null, tempo: number = 120)
 
   useEffect(() => {
     // Initialize Tone.js synth
-    synthRef.current = new Tone.PolySynth(Tone.Synth).toDestination();
+    if (!synthRef.current) {
+      synthRef.current = new Tone.PolySynth(Tone.Synth).toDestination();
+    }
+    
+    // Update tempo without recreating synth
     Tone.Transport.bpm.value = tempo;
 
     if (data && data.events.length > 0) {
@@ -41,13 +45,21 @@ export const usePlayback = (data: TranscriptionData | null, tempo: number = 120)
     }
 
     return () => {
+      // Only dispose on unmount, not on tempo/data changes
+    };
+  }, [data, tempo]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
       Tone.Transport.cancel();
       synthRef.current?.dispose();
+      synthRef.current = null;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [data, tempo]);
+  }, []);
 
   // Update current time during playback
   useEffect(() => {
@@ -80,7 +92,20 @@ export const usePlayback = (data: TranscriptionData | null, tempo: number = 120)
   }, [isPlaying, data]);
 
   const play = async () => {
-    if (!data || !synthRef.current) return;
+    if (!data) {
+      console.warn('Cannot play: No data available');
+      return;
+    }
+
+    if (!synthRef.current) {
+      console.warn('Cannot play: Synth not initialized');
+      return;
+    }
+
+    if (data.events.length === 0) {
+      console.warn('Cannot play: No events in data');
+      return;
+    }
 
     try {
       await Tone.start();
@@ -92,6 +117,7 @@ export const usePlayback = (data: TranscriptionData | null, tempo: number = 120)
       const startOffset = data.startTime || 0;
       startTimeRef.current = Tone.now();
 
+      let scheduledCount = 0;
       // Schedule all note events
       for (const event of data.events) {
         if ('note' in event) {
@@ -100,6 +126,11 @@ export const usePlayback = (data: TranscriptionData | null, tempo: number = 120)
           const noteName = Tone.Frequency(midiNote, 'midi').toNote();
           const start = noteEvent.timestamp - startOffset;
           const duration = noteEvent.duration;
+
+          if (start < 0) {
+            console.warn(`Skipping note with negative start time: ${noteEvent.note} at ${start}`);
+            continue;
+          }
 
           const id1 = Tone.Transport.schedule((time) => {
             synthRef.current?.triggerAttack(noteName, time, noteEvent.velocity);
@@ -110,7 +141,13 @@ export const usePlayback = (data: TranscriptionData | null, tempo: number = 120)
           }, start + duration);
 
           scheduleRef.current.push(id1, id2);
+          scheduledCount++;
         }
+      }
+
+      if (scheduledCount === 0) {
+        console.warn('No note events were scheduled for playback');
+        return;
       }
 
       Tone.Transport.start();
@@ -118,6 +155,7 @@ export const usePlayback = (data: TranscriptionData | null, tempo: number = 120)
       setCurrentTime(0);
     } catch (error) {
       console.error('Playback error:', error);
+      setIsPlaying(false);
     }
   };
 

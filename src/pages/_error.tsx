@@ -64,9 +64,11 @@ function Error({ statusCode }: ErrorProps) {
 }
 
 Error.getInitialProps = ({ res, err }: NextPageContext) => {
-  const statusCode = res ? res.statusCode : err ? err.statusCode : 404;
+  const statusCode = res ? res.statusCode : err ? (err as any).statusCode : 404;
   return { statusCode };
 };
+
+Error.displayName = 'ErrorPage';
 
 export default Error;
 
