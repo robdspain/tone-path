@@ -38,16 +38,35 @@ export const LoopController: React.FC<LoopControllerProps> = ({
   const [isDraggingEnd, setIsDraggingEnd] = useState(false);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [waveformData, setWaveformData] = useState<{ peaks: number[]; duration: number } | null>(null);
+  const [isGeneratingWaveform, setIsGeneratingWaveform] = useState(false);
   const waveformRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState(propCurrentTime);
 
   // Generate waveform when audio buffer changes (without section detection)
   useEffect(() => {
     if (audioBuffer) {
-      const waveform = generateWaveform(audioBuffer, 2000);
-      setWaveformData({ peaks: waveform.peaks, duration: waveform.duration });
+      setIsGeneratingWaveform(true);
+      try {
+        // Use setTimeout to avoid blocking the UI
+        setTimeout(() => {
+          try {
+            const waveform = generateWaveform(audioBuffer, 2000);
+            setWaveformData({ peaks: waveform.peaks, duration: waveform.duration });
+          } catch (error) {
+            console.error('Error generating waveform:', error);
+            setWaveformData(null);
+          } finally {
+            setIsGeneratingWaveform(false);
+          }
+        }, 0);
+      } catch (error) {
+        console.error('Error setting up waveform generation:', error);
+        setIsGeneratingWaveform(false);
+        setWaveformData(null);
+      }
     } else {
       setWaveformData(null);
+      setIsGeneratingWaveform(false);
     }
   }, [audioBuffer]);
 
@@ -56,6 +75,9 @@ export const LoopController: React.FC<LoopControllerProps> = ({
     setCurrentTime(propCurrentTime);
   }, [propCurrentTime]);
 
+  // Use audioBuffer duration if duration prop is 0 or not set
+  const effectiveDuration = duration > 0 ? duration : (audioBuffer?.duration || 0);
+
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -63,31 +85,31 @@ export const LoopController: React.FC<LoopControllerProps> = ({
   };
 
   const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!duration || !waveformRef.current) return;
+    if (!effectiveDuration || !waveformRef.current) return;
     const rect = waveformRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, x / rect.width));
-    const newTime = percentage * duration;
+    const newTime = percentage * effectiveDuration;
     onSeek?.(newTime);
   };
 
   const handleLoopStartDrag = (e: React.MouseEvent | MouseEvent) => {
-    if (!duration || !waveformRef.current) return;
+    if (!effectiveDuration || !waveformRef.current) return;
     const rect = waveformRef.current.getBoundingClientRect();
     const x = (e as MouseEvent).clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, x / rect.width));
-    const newTime = percentage * duration;
+    const newTime = percentage * effectiveDuration;
     if (newTime < loopEnd - 0.1) {
       onLoopStartChange(newTime);
     }
   };
 
   const handleLoopEndDrag = (e: React.MouseEvent | MouseEvent) => {
-    if (!duration || !waveformRef.current) return;
+    if (!effectiveDuration || !waveformRef.current) return;
     const rect = waveformRef.current.getBoundingClientRect();
     const x = (e as MouseEvent).clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, x / rect.width));
-    const newTime = percentage * duration;
+    const newTime = percentage * effectiveDuration;
     if (newTime > loopStart + 0.1) {
       onLoopEndChange(newTime);
     }
@@ -95,6 +117,8 @@ export const LoopController: React.FC<LoopControllerProps> = ({
 
   // Global mouse handlers for dragging
   useEffect(() => {
+    if (!effectiveDuration) return;
+    
     const handleMouseMove = (e: MouseEvent) => {
       if (isDraggingStart) {
         handleLoopStartDrag(e);
@@ -117,9 +141,9 @@ export const LoopController: React.FC<LoopControllerProps> = ({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDraggingStart, isDraggingEnd, duration, loopStart, loopEnd]);
+  }, [isDraggingStart, isDraggingEnd, duration, loopStart, loopEnd, audioBuffer]);
 
-  if (!duration || duration === 0 || !waveformData) {
+  if (!audioBuffer) {
     return (
       <div className="w-full dark:bg-gray-800/50 bg-gray-200/50 rounded-lg p-4 text-center dark:text-gray-300 text-gray-700">
         No audio loaded
@@ -127,10 +151,38 @@ export const LoopController: React.FC<LoopControllerProps> = ({
     );
   }
 
-  const loopStartPercentage = (loopStart / duration) * 100;
-  const loopEndPercentage = (loopEnd / duration) * 100;
+  if (isGeneratingWaveform) {
+    return (
+      <div className="w-full dark:bg-gray-800/50 bg-gray-200/50 rounded-lg p-4 text-center dark:text-gray-300 text-gray-700">
+        <div className="flex items-center justify-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal"></div>
+          <span>Generating waveform...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!effectiveDuration || effectiveDuration === 0) {
+    return (
+      <div className="w-full dark:bg-gray-800/50 bg-gray-200/50 rounded-lg p-4 text-center dark:text-gray-300 text-gray-700">
+        No audio loaded or invalid duration
+      </div>
+    );
+  }
+
+  if (!waveformData || waveformData.peaks.length === 0) {
+    return (
+      <div className="w-full dark:bg-gray-800/50 bg-gray-200/50 rounded-lg p-4 text-center dark:text-gray-300 text-gray-700">
+        <div>Failed to generate waveform. Audio duration: {effectiveDuration.toFixed(2)}s</div>
+        <div className="text-xs mt-2">Try reloading the audio file</div>
+      </div>
+    );
+  }
+
+  const loopStartPercentage = (loopStart / effectiveDuration) * 100;
+  const loopEndPercentage = (loopEnd / effectiveDuration) * 100;
   const loopWidth = loopEndPercentage - loopStartPercentage;
-  const progressPercentage = (currentTime / duration) * 100;
+  const progressPercentage = (currentTime / effectiveDuration) * 100;
 
   return (
     <motion.div
@@ -251,6 +303,7 @@ export const LoopController: React.FC<LoopControllerProps> = ({
             Loop: {formatTime(loopEnd - loopStart)}
           </span>
           <span>{formatTime(loopEnd)}</span>
+          <span className="ml-auto">Total: {formatTime(effectiveDuration)}</span>
         </div>
       </div>
 

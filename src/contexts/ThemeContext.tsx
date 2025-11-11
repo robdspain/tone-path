@@ -17,24 +17,33 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     // Only run on client side
     if (typeof window === 'undefined') return;
     
-    setMounted(true);
-    // Load theme from localStorage
-    const savedTheme = localStorage.getItem('theme') as Theme | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-    } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setTheme(prefersDark ? 'dark' : 'light');
+    try {
+      setMounted(true);
+      // Load theme from localStorage
+      const savedTheme = localStorage.getItem('theme') as Theme | null;
+      if (savedTheme && (savedTheme === 'dark' || savedTheme === 'light')) {
+        setTheme(savedTheme);
+      } else {
+        // Check system preference
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setTheme(prefersDark ? 'dark' : 'light');
+      }
+    } catch (error) {
+      console.error('Error loading theme:', error);
+      setTheme('dark'); // Fallback to dark theme
     }
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
-    // Update document class and localStorage
-    document.documentElement.classList.remove('dark', 'light');
-    document.documentElement.classList.add(theme);
-    localStorage.setItem('theme', theme);
+    if (!mounted || typeof window === 'undefined') return;
+    try {
+      // Update document class and localStorage
+      document.documentElement.classList.remove('dark', 'light');
+      document.documentElement.classList.add(theme);
+      localStorage.setItem('theme', theme);
+    } catch (error) {
+      console.error('Error setting theme:', error);
+    }
   }, [theme, mounted]);
 
   const toggleTheme = () => {

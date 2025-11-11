@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import Head from 'next/head';
 import { AudioVisualizer } from '@/components/AudioVisualizer';
@@ -523,22 +523,6 @@ export default function Home() {
     importedAudioPlayback.stop();
   };
 
-  // Auto-analyze chords when audio is imported
-  useEffect(() => {
-    if (importedAudioBuffer && !hasAnalyzedRef.current && !isAnalyzing) {
-      console.log('Auto-triggering chord analysis for imported audio...');
-      hasAnalyzedRef.current = true;
-      // Use a small delay to ensure state is ready
-      const timer = setTimeout(() => {
-        handleAnalyzeAudio();
-      }, 100);
-      return () => clearTimeout(timer);
-    } else if (!importedAudioBuffer) {
-      // Reset flag when audio is cleared
-      hasAnalyzedRef.current = false;
-    }
-  }, [importedAudioBuffer]); // Only depend on importedAudioBuffer
-
   // Helper function to convert chord name to notes
   const getChordNotes = (chordName: string): string[] => {
     const CHORD_PATTERNS: Record<string, string[]> = {
@@ -614,7 +598,7 @@ export default function Home() {
   };
 
   // Helper function to save imported song to library
-  const saveImportedSongToLibrary = async () => {
+  const saveImportedSongToLibrary = useCallback(async () => {
     if (!importedAudioBuffer || analyzedChords.length === 0) {
       console.warn('Cannot save: no audio buffer or chords');
       return;
@@ -674,9 +658,9 @@ export default function Home() {
       console.error('Failed to save imported song:', error);
       alert('Failed to save song to library. Please try again.');
     }
-  };
+  }, [importedAudioBuffer, analyzedChords, importedSongMetadata, instrument, detectedBPM]);
 
-  const handleAnalyzeAudio = async () => {
+  const handleAnalyzeAudio = useCallback(async () => {
     if (!importedAudioBuffer) return;
     
     setIsAnalyzing(true);
@@ -733,7 +717,23 @@ export default function Home() {
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [importedAudioBuffer, saveImportedSongToLibrary]);
+
+  // Auto-analyze chords when audio is imported
+  useEffect(() => {
+    if (importedAudioBuffer && !hasAnalyzedRef.current && !isAnalyzing) {
+      console.log('Auto-triggering chord analysis for imported audio...');
+      hasAnalyzedRef.current = true;
+      // Use a small delay to ensure state is ready
+      const timer = setTimeout(() => {
+        handleAnalyzeAudio();
+      }, 100);
+      return () => clearTimeout(timer);
+    } else if (!importedAudioBuffer) {
+      // Reset flag when audio is cleared
+      hasAnalyzedRef.current = false;
+    }
+  }, [importedAudioBuffer, isAnalyzing, handleAnalyzeAudio]); // Include handleAnalyzeAudio in dependencies
 
   const handleChordClick = (time: number) => {
     // Seek to the clicked chord time in the imported audio playback
