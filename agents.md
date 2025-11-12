@@ -74,7 +74,143 @@ This document tracks the autonomous (or automation-ready) agents that power Tone
 
 ---
 
+## Atomic Design: Principles & Implementation
+
+### What it is (quick definition)
+
+Atomic Design is a method for building UI design systems by composing interfaces from five hierarchical levels: atoms → molecules → organisms → templates → pages. It promotes consistency, reusability, and clear structure while still validating components in real context.
+
+### The five levels with examples
+
+- **Atoms**: the smallest, indivisible UI parts (e.g., color tokens, typography styles, spacing units; primitive components like Button, Input, Icon).
+- **Molecules**: simple groupings of atoms that function together (e.g., SearchField = Label + Input + IconButton).
+- **Organisms**: relatively complex, distinct sections of UI (e.g., Header with logo, nav, search).
+- **Templates**: page-level wireframes showing layout/regions without final content (structure, not copy).
+- **Pages**: real content applied to templates to validate copy, edge cases, and fidelity.
+
+⸻
+
+### Core principles (the "why")
+
+- **Composition over inheritance**: build small parts and compose them up the hierarchy.
+- **Single source of truth via tokens**: centralize decisions like color, type, spacing, radius in design tokens to make themes and platforms consistent. The DTCG (W3C Community) publishes an interop spec for token formats.
+- **Context matters**: validate components in templates/pages so they're tested with real content and flows—not just in isolation.
+- **Consistency & scalability**: shared parts reduce divergence and speed up delivery as the system grows.
+
+⸻
+
+### Practical implementation guide
+
+#### 1) Name & organize
+
+- Keep names functional (what it is/does), not metaphorical.
+- Example folders (map to Storybook categories if used):
+
+```
+/tokens                # color, type, space, radii, motion
+/atoms                 # Button, Input, Avatar, Tag
+/molecules             # SearchField, AvatarWithName, FormRow
+/organisms             # AppHeader, ChatSidebar, MessageComposer
+/templates             # DashboardTemplate, ChatLayout
+/pages                 # /chat/[id], /settings
+```
+
+- Storybook: group stories under Atoms/, Molecules/, etc., but avoid bike-shedding boundaries—opt for clarity over perfect taxonomy.
+
+#### 2) Design tokens (the real "atoms")
+
+- Store tokens in DTCG JSON; generate platform artifacts (CSS vars, TS, iOS, Android).
+
+```json
+{
+  "$schema": "https://www.designtokens.org/schemas/2025-10.schema.json",
+  "color": {
+    "brand": { "primary": { "value": "#0EA5E9" } },
+    "text":  { "default": { "value": "{color.neutral.900}" } }
+  },
+  "radius": { "md": { "value": "8px" } },
+  "space":  { "2":  { "value": "8px" } }
+}
+```
+
+- Build with Style Dictionary or equivalent to emit cross-platform assets.
+
+#### 3) Component standards
+
+- **Atoms**: single responsibility; no external layout; respect tokens; full a11y (labels, roles, focus).
+- **Molecules/Organisms**: compose smaller parts; pass content via props/slots; keep layout predictable (no surprise margins).
+- **Templates**: define regions & data contracts; avoid hard-coded content.
+- **Pages**: fetch real data; handle loading/empty/error states; prove the design.
+
+#### 4) Testing
+
+- Unit: atoms/molecules (props, states).
+- Visual regression: snapshots for key variants.
+- Accessibility: automated (axe), plus manual keyboard/screen-reader checks.
+- Integration: templates/pages with real data/fixtures.
+
+#### 5) Governance & versioning
+
+- RFC/change proposals for new components or breaking changes.
+- Semantic versioning; changelogs with migration notes.
+- Deprecation path (lint rules, codemods).
+- Usage analytics: track component adoption, duplication hotspots.
+
+⸻
+
+### Applying it to Tone Path UIs (quick mapping)
+
+- **Atoms**: Button, Badge, Icon, Input, Textarea, ThemeToggle, ErrorBoundary.
+- **Molecules**: SearchField, FileUpload, LiveNoteDisplay, SimpleTuner, Controls.
+- **Organisms**: PracticeShell, ChordChart, PianoRoll, Metronome, AudioVisualizer, FretboardVisualizer.
+- **Templates**: PracticeLayout (shell + visualizer + controls + sidebar).
+- **Pages**: `/` (index), `/admin`, `/404` with real practice session data.
+
+⸻
+
+### Do/Don't checklist
+
+**Do**
+- Centralize style decisions in tokens and wire components to them.
+- Keep atoms dumb/pure; lift data and side-effects up.
+- Validate components in pages with real content.
+- Document props, a11y, examples, and edge cases in Storybook.
+
+**Don't**
+- Over-optimize labels like "is this a molecule or organism?" If unclear, choose the bucket that best serves discoverability. Common confusion between those two is normal.
+- Treat templates as production pages (they're for structure).
+- Bypass tokens with ad-hoc values (causes theme drift).
+
+⸻
+
+### Known pitfalls & how to avoid them
+
+- **Fuzzy boundaries (molecule vs organism)**: write a one-line purpose statement in each README; organize for team comprehension, not metaphor purity.
+- **Rigidity / context loss**: pair isolation (component dev) with page-context checks to keep components adaptable and experience-driven.
+- **Stakeholder misunderstanding at scale**: publish a short contribution playbook (naming, review process, examples) and hold lightweight office hours.
+
+⸻
+
+### Quick start (copy/paste)
+
+1. Add DTCG tokens → generate CSS vars/TS.
+2. Build core atoms (Button, Input, Icon, Avatar) using tokens only.
+3. Compose key molecules (SearchField, TagList) and organisms (Header, Composer).
+4. Create one template per major layout and a demo page with real content to validate.
+5. Wire up Storybook: Atoms/*, Molecules/*, …; add a11y and visual tests.
+
+⸻
+
+### Further reading
+
+- Brad Frost, Atomic Design (free web book overview).
+- Brad Frost, "Atomic Design and Storybook."
+- Design Tokens Community Group (spec + schema).
+
+---
+
 ## Handoff Notes
 - Each agent exposes clear inputs/outputs; new contributors can tackle one agent without touching the others.
-- When filing work, reference the agent name so design, product, and engineering stay aligned (e.g., “Jam Companion Agent: Add bossa pattern”).
-- Keep this document updated whenever an agent’s scope or status changes to maintain a shared map of Tone Path’s intelligent systems.
+- When filing work, reference the agent name so design, product, and engineering stay aligned (e.g., "Jam Companion Agent: Add bossa pattern").
+- Keep this document updated whenever an agent's scope or status changes to maintain a shared map of Tone Path's intelligent systems.
+- Follow Atomic Design principles when creating new UI components: start with tokens, build atoms, compose molecules/organisms, validate in pages.

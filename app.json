@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Tone Path",
+    "slug": "tone-path",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./public/favicon.svg",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./public/favicon.svg",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tonepath.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./public/favicon.svg",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.tonepath.app"
+    },
+    "web": {
+      "favicon": "./public/favicon.svg",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "tonepath",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
+

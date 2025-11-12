@@ -5,20 +5,27 @@ import type { ChordEvent } from '@/types/transcription';
 interface ChordChartProps {
   chords: ChordEvent[];
   currentTime?: number;
+  showAll?: boolean; // New prop to show all chords
 }
 
 export const ChordChart: React.FC<ChordChartProps> = ({
   chords,
   currentTime = 0,
+  showAll = false,
 }) => {
-  // Show all chords if currentTime is 0 (song loaded but not playing)
+  // Show all chords if showAll is true or currentTime is 0 (song loaded but not playing)
   // Otherwise show recent chords based on currentTime
   const displayChords = useMemo(() => {
     if (chords.length === 0) return [];
     
+    // If showAll is true, show all chords
+    if (showAll) {
+      return chords;
+    }
+    
     // If currentTime is 0, show all chords (song just loaded)
     if (currentTime === 0) {
-      return chords.slice(-10); // Show last 10 chords
+      return chords; // Show all chords instead of just last 10
     }
     
     // Otherwise filter by currentTime
@@ -27,7 +34,7 @@ export const ChordChart: React.FC<ChordChartProps> = ({
       .slice(-5);
     
     return recentChords.length > 0 ? recentChords : chords.slice(-5);
-  }, [chords, currentTime]);
+  }, [chords, currentTime, showAll]);
 
   return (
     <div className="w-full bg-gray-800/50 rounded-lg p-4">

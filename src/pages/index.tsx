@@ -1,13 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import Head from 'next/head';
 import { AudioVisualizer } from '@/components/AudioVisualizer';
 import { PianoRoll } from '@/components/PianoRoll';
 import { ChordProgressionGrid } from '@/components/ChordProgressionGrid';
-import { Tuner } from '@/components/Tuner';
 import { SimpleTuner } from '@/components/SimpleTuner';
 import { Metronome } from '@/components/Metronome';
-import { TraditionalMetronome } from '@/components/TraditionalMetronome';
 import { CircleOfFifths } from '@/components/CircleOfFifths';
 import { LiveNoteDisplay } from '@/components/LiveNoteDisplay';
 import { SongNoteDisplay } from '@/components/SongNoteDisplay';
@@ -30,6 +28,7 @@ import { FretboardVisualizer } from '@/components/FretboardVisualizer';
 import { FeedbackHUD } from '@/components/FeedbackHUD';
 import { ProgressChart } from '@/components/ProgressChart';
 import { ChordChart } from '@/components/ChordChart';
+import { BarGrid } from '@/components/BarGrid';
 import { usePlaybackVisualizer } from '@/hooks/usePlaybackVisualizer';
 import { useAudioStream } from '@/hooks/useAudioStream';
 import { usePitchDetection } from '@/hooks/usePitchDetection';
@@ -74,7 +73,9 @@ export default function Home() {
   const [isImportSectionExpanded, setIsImportSectionExpanded] = useState(true);
   const [isToolsSectionExpanded, setIsToolsSectionExpanded] = useState(false);
   const [showToolsDropdown, setShowToolsDropdown] = useState(false);
-  const [selectedTool, setSelectedTool] = useState<'simple-tuner' | 'tuner' | 'traditional-metronome' | 'metronome' | 'circle-of-fifths' | null>(null);
+  const [selectedTool, setSelectedTool] = useState<'circle-of-fifths' | null>(null);
+  const [showTunerPopup, setShowTunerPopup] = useState(false);
+  const [showMetronomePopup, setShowMetronomePopup] = useState(false);
   const toolsDropdownRef = useRef<HTMLDivElement>(null);
   const hasAnalyzedRef = useRef(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -102,6 +103,24 @@ export default function Home() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showToolsDropdown]);
+
+  // Close popups with Escape key
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (showTunerPopup) setShowTunerPopup(false);
+        if (showMetronomePopup) setShowMetronomePopup(false);
+      }
+    };
+
+    if (showTunerPopup || showMetronomePopup) {
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showTunerPopup, showMetronomePopup]);
 
   // Expand tools section when navigating via MobileNav
   useEffect(() => {
@@ -929,6 +948,7 @@ export default function Home() {
                   <ChordChart
                     chords={displayChordEvents}
                     currentTime={analyzedChordEvents.length > 0 ? importedAudioPlayback.currentTime : playbackState.currentTime}
+                    showAll={analyzedChordEvents.length > 0} // Show all chords when displaying analyzed chords
                   />
                 ) : (
                   <p className="text-sm text-white/60">
@@ -1031,6 +1051,7 @@ export default function Home() {
                 <ChordChart
                   chords={displayChordEvents.length ? displayChordEvents : recordedChordEvents}
                   currentTime={analyzedChordEvents.length > 0 ? importedAudioPlayback.currentTime : playbackState.currentTime}
+                  showAll={analyzedChordEvents.length > 0} // Show all chords when displaying analyzed chords
                 />
               ) : (
                 <p className="text-sm text-white/60">
@@ -1141,41 +1162,13 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => {
-                      setSelectedTool('simple-tuner');
+                      setShowTunerPopup(true);
                       setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
-                      setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
                     }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
-                      selectedTool === 'simple-tuner' ? 'bg-white/10 text-white' : 'text-white/80'
-                    }`}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 text-white/80"
                   >
                     <span>🎯</span>
                     <span>Simple Tuner</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedTool('tuner');
-                      setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
-                      setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
-                    }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
-                      selectedTool === 'tuner' ? 'bg-white/10 text-white' : 'text-white/80'
-                    }`}
-                  >
-                    <span>🎵</span>
-                    <span>Advanced Tuner</span>
                   </button>
                   
                   <div className="border-t border-white/10 my-2" />
@@ -1185,38 +1178,10 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => {
-                      setSelectedTool('traditional-metronome');
+                      setShowMetronomePopup(true);
                       setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
-                      setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
                     }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
-                      selectedTool === 'traditional-metronome' ? 'bg-white/10 text-white' : 'text-white/80'
-                    }`}
-                  >
-                    <span>⏱️</span>
-                    <span>Traditional Metronome</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedTool('metronome');
-                      setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
-                      setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
-                    }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
-                      selectedTool === 'metronome' ? 'bg-white/10 text-white' : 'text-white/80'
-                    }`}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 text-white/80"
                   >
                     <span>🎼</span>
                     <span>Digital Metronome</span>
@@ -1396,46 +1361,6 @@ export default function Home() {
           >
             <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-6">
               {/* Show selected tool or all tools if none selected */}
-              {(!selectedTool || selectedTool === 'simple-tuner') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Simple Tuner</h3>
-                  <SimpleTuner currentNote={currentNote} />
-                </div>
-              )}
-
-              {(!selectedTool || selectedTool === 'tuner') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Advanced Tuner</h3>
-                  <Tuner currentNote={currentNote} />
-                </div>
-              )}
-
-              {(!selectedTool || selectedTool === 'traditional-metronome') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Traditional Metronome</h3>
-                  <TraditionalMetronome 
-                    initialBpm={detectedBPM || 120}
-                    onBpmChange={(bpm) => {
-                      // Sync with playback tempo if needed
-                      setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
-                    }}
-                  />
-                </div>
-              )}
-
-              {(!selectedTool || selectedTool === 'metronome') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Digital Metronome</h3>
-                  <Metronome 
-                    initialBpm={detectedBPM || 120}
-                    onBpmChange={(bpm) => {
-                      // Sync with playback tempo if needed
-                      setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
-                    }}
-                  />
-                </div>
-              )}
-
               {(!selectedTool || selectedTool === 'circle-of-fifths') && (
                 <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4">Circle of Fifths</h3>
@@ -1540,6 +1465,19 @@ export default function Home() {
               onSeek={importedAudioPlayback.seek}
             />
           </div>
+
+          {/* Bar Grid - Display bars with chords */}
+          {importedAudioBuffer && analyzedChordEvents.length > 0 && detectedBPM && (
+            <div className="rounded-3xl border border-emerald-400/40 bg-slate-900/60 p-4 sm:p-6">
+              <BarGrid
+                chords={analyzedChordEvents}
+                currentTime={importedAudioPlayback.currentTime}
+                bpm={detectedBPM}
+                timeSignature={{ numerator: 4, denominator: 4 }}
+                duration={importedAudioPlayback.duration}
+              />
+            </div>
+          )}
 
           {/* Instrument-Specific Display: Chords for Guitar, Notes for Trumpet */}
           {importedAudioBuffer && (analyzedChords.length > 0 || importedChords.frames.length > 0) && (
@@ -1840,10 +1778,7 @@ export default function Home() {
                 // Get unique chords (by chord name, keep first occurrence)
                 const uniqueChordsMap = new Map<string, ChordFrame>();
                 analyzedChords.forEach(chord => {
-                  // Skip relative minor chords
-                  if (relativeMinorKey && chord.chord === relativeMinorKey) {
-                    return;
-                  }
+                  // Show all chords - don't filter out relative minor
                   if (!uniqueChordsMap.has(chord.chord)) {
                     uniqueChordsMap.set(chord.chord, chord);
                   }
@@ -2442,6 +2377,78 @@ export default function Home() {
           </motion.div>
         </div>
       )}
+
+      {/* Simple Tuner Popup */}
+      <AnimatePresence>
+        {showTunerPopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowTunerPopup(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card rounded-3xl border border-white/10 p-6 sm:p-8 max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-white">🎯 Simple Tuner</h2>
+                <button
+                  onClick={() => setShowTunerPopup(false)}
+                  className="text-white/60 hover:text-white transition-colors text-2xl leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <SimpleTuner currentNote={currentNote} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Digital Metronome Popup */}
+      <AnimatePresence>
+        {showMetronomePopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowMetronomePopup(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card rounded-3xl border border-white/10 p-6 sm:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-white">🎼 Digital Metronome</h2>
+                <button
+                  onClick={() => setShowMetronomePopup(false)}
+                  className="text-white/60 hover:text-white transition-colors text-2xl leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <Metronome 
+                initialBpm={detectedBPM || 120}
+                onBpmChange={(bpm) => {
+                  // Sync with playback tempo if needed
+                  setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
+                }}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

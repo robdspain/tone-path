@@ -1,0 +1,107 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025-10.schema.json",
+  "color": {
+    "brand": {
+      "primary": { "value": "#0066ff" },
+      "secondary": { "value": "#8f00ff" },
+      "accent": { "value": "#00e6e6" }
+    },
+    "semantic": {
+      "success": { "value": "#00ff88" },
+      "warning": { "value": "#ffaa00" },
+      "error": { "value": "#ff3366" }
+    },
+    "neutral": {
+      "900": { "value": "#0a0e1a" },
+      "800": { "value": "#111827" },
+      "700": { "value": "#1f2937" },
+      "600": { "value": "#374151" },
+      "500": { "value": "#6b7280" },
+      "400": { "value": "#9ca3af" },
+      "300": { "value": "#d1d5db" },
+      "200": { "value": "#e5e7eb" },
+      "100": { "value": "#f3f4f6" },
+      "50": { "value": "#f9fafb" }
+    },
+    "text": {
+      "default": { "value": "{color.neutral.100}" },
+      "muted": { "value": "{color.neutral.400}" },
+      "inverse": { "value": "{color.neutral.900}" }
+    },
+    "glass": {
+      "bg": { "value": "rgba(17, 24, 39, 0.7)" },
+      "border": { "value": "rgba(255, 255, 255, 0.1)" }
+    }
+  },
+  "radius": {
+    "sm": { "value": "4px" },
+    "md": { "value": "8px" },
+    "lg": { "value": "12px" },
+    "xl": { "value": "16px" },
+    "full": { "value": "9999px" }
+  },
+  "space": {
+    "0": { "value": "0px" },
+    "1": { "value": "4px" },
+    "2": { "value": "8px" },
+    "3": { "value": "12px" },
+    "4": { "value": "16px" },
+    "5": { "value": "20px" },
+    "6": { "value": "24px" },
+    "8": { "value": "32px" },
+    "10": { "value": "40px" },
+    "12": { "value": "48px" },
+    "16": { "value": "64px" },
+    "20": { "value": "80px" }
+  },
+  "typography": {
+    "fontFamily": {
+      "sans": {
+        "value": "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif"
+      },
+      "mono": {
+        "value": "'Courier New', Courier, monospace"
+      }
+    },
+    "fontSize": {
+      "xs": { "value": "12px" },
+      "sm": { "value": "14px" },
+      "base": { "value": "16px" },
+      "lg": { "value": "18px" },
+      "xl": { "value": "20px" },
+      "2xl": { "value": "24px" },
+      "3xl": { "value": "30px" },
+      "4xl": { "value": "36px" }
+    },
+    "fontWeight": {
+      "normal": { "value": "400" },
+      "medium": { "value": "500" },
+      "semibold": { "value": "600" },
+      "bold": { "value": "700" }
+    },
+    "lineHeight": {
+      "tight": { "value": "1.25" },
+      "normal": { "value": "1.5" },
+      "relaxed": { "value": "1.75" }
+    }
+  },
+  "motion": {
+    "duration": {
+      "fast": { "value": "150ms" },
+      "normal": { "value": "300ms" },
+      "slow": { "value": "500ms" }
+    },
+    "easing": {
+      "easeIn": { "value": "cubic-bezier(0.4, 0, 1, 1)" },
+      "easeOut": { "value": "cubic-bezier(0, 0, 0.2, 1)" },
+      "easeInOut": { "value": "cubic-bezier(0.4, 0, 0.2, 1)" }
+    }
+  },
+  "shadow": {
+    "sm": { "value": "0 1px 2px 0 rgba(0, 0, 0, 0.05)" },
+    "md": { "value": "0 4px 6px -1px rgba(0, 0, 0, 0.1)" },
+    "lg": { "value": "0 10px 15px -3px rgba(0, 0, 0, 0.1)" },
+    "xl": { "value": "0 20px 25px -5px rgba(0, 0, 0, 0.1)" }
+  }
+}
+
