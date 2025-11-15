@@ -171,7 +171,9 @@ export const useAudioPlayback = (audioBuffer: AudioBuffer | null) => {
 
   const pause = () => {
     if (sourceRef.current) {
+      sourceRef.current.onended = null;
       sourceRef.current.stop();
+      sourceRef.current.disconnect();
       sourceRef.current = null;
     }
     setState((prev) => ({ ...prev, isPlaying: false }));
@@ -179,7 +181,9 @@ export const useAudioPlayback = (audioBuffer: AudioBuffer | null) => {
 
   const stop = () => {
     if (sourceRef.current) {
+      sourceRef.current.onended = null;
       sourceRef.current.stop();
+      sourceRef.current.disconnect();
       sourceRef.current = null;
     }
     setState((prev) => ({ ...prev, isPlaying: false, currentTime: 0 }));

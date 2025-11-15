@@ -57,8 +57,29 @@ const CHORD_PATTERNS: Record<string, string[]> = {
   'Gsus4': ['G', 'C', 'D'],
 };
 
+const ENHARMONIC_MAP: Record<string, string> = {
+  Db: 'C#',
+  Eb: 'D#',
+  Gb: 'F#',
+  Ab: 'G#',
+  Bb: 'A#',
+};
+
 function getNoteName(note: string): string {
-  return note.replace(/\d/g, '');
+  const sanitized = note
+    .replace(/\d/g, '')
+    .replace('♭', 'b')
+    .replace('♯', '#')
+    .trim();
+  const letter = sanitized.charAt(0).toUpperCase();
+  const accidental = sanitized.length > 1 ? sanitized.charAt(1) : '';
+  const normalizedAccidental = accidental === 'b' || accidental === '#' ? accidental : '';
+  return `${letter}${normalizedAccidental}`;
+}
+
+function normalizeNoteName(note: string): string {
+  const base = getNoteName(note);
+  return ENHARMONIC_MAP[base as keyof typeof ENHARMONIC_MAP] || base;
 }
 
 function getOctave(note: string): number {
@@ -67,37 +88,52 @@ function getOctave(note: string): number {
 }
 
 // Enhanced chord detection with confidence scoring
-function detectChordFromNotes(notes: string[]): { chord: string; confidence: number } | null {
-  if (notes.length < 3) return null;
+function detectChordFromNotes(noteWeights: Record<string, number>): { chord: string; confidence: number } | null {
+  const entries = Object.entries(noteWeights);
+  if (!entries.length) return null;
 
-  const noteNames = notes.map(getNoteName);
-  const uniqueNotes = [...new Set(noteNames)];
+  const totalWeight = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  if (totalWeight === 0) return null;
 
   let bestMatch: { chord: string; confidence: number } | null = null;
   let bestScore = 0;
 
   for (const [chord, pattern] of Object.entries(CHORD_PATTERNS)) {
-    const matches = pattern.filter((note) => uniqueNotes.includes(note));
-    const score = matches.length / pattern.length;
-    
-    // Require at least 3 matching notes and high confidence
-    if (matches.length >= 3 && score > bestScore) {
-      bestScore = score;
-      bestMatch = {
-        chord,
-        confidence: Math.min(score * 1.2, 1.0), // Boost confidence slightly
-      };
+    let matchedWeight = 0;
+    let matchCount = 0;
+
+    pattern.forEach((note) => {
+      const weight = noteWeights[note] || 0;
+      if (weight > 0) {
+        matchedWeight += weight;
+        matchCount += 1;
+      }
+    });
+
+    if (matchCount < 2 || matchedWeight === 0) {
+      continue;
+    }
+
+    const coverage = matchCount / pattern.length;
+    const weightedScore = matchedWeight / totalWeight;
+    const combinedScore = (coverage * 0.6) + (weightedScore * 0.4);
+
+    if (combinedScore > bestScore) {
+      bestScore = combinedScore;
+      const confidence = Math.min(0.45 + combinedScore * 0.55, 1);
+      bestMatch = { chord, confidence };
     }
   }
 
-  return bestMatch && bestScore > 0.7 ? bestMatch : null;
+  return bestMatch && bestScore >= 0.45 ? bestMatch : null;
 }
 
 export const useChordDetection = () => {
   const [currentChord, setCurrentChord] = useState<ChordEvent | null>(null);
   const activeNotesRef = useRef<Map<string, number>>(new Map());
   const chordHistoryRef = useRef<ChordEvent[]>([]);
-  const detectionWindowRef = useRef<number>(0.8); // 800ms window (increased for sequential playing)
+  const detectionWindowRef = useRef<number>(1.2); // Allow more staggered notes to accumulate
+  const lastDetectionTimeRef = useRef<number>(0);
 
   // Update chord detection based on active notes
   const updateChord = (notes: NoteEvent[], timestamp: number) => {
@@ -107,79 +143,73 @@ export const useChordDetection = () => {
     // Filter notes within detection window (increased window for sequential playing)
     const recentNotes = notes.filter((n) => n.timestamp >= windowStart);
     
-    // Need at least 2 notes to attempt chord detection (lowered from 3)
     if (recentNotes.length < 2) {
+      if (currentChord && now - lastDetectionTimeRef.current < 0.4) {
+        return;
+      }
       setCurrentChord(null);
       return;
     }
 
-    // Extract unique note names (ignoring octave for chord detection)
-    const noteNames = recentNotes.map((n) => getNoteName(n.note));
-    const uniqueNotes = [...new Set(noteNames)];
+    const weightedNoteMap = recentNotes.reduce<Record<string, number>>((acc, note) => {
+      const normalized = normalizeNoteName(note.note);
+      const velocity = note.velocity ?? 0.7;
+      const normalizedDuration = Math.min(Math.max(note.duration / 0.6, 0), 1);
+      const weight = velocity * 0.6 + normalizedDuration * 0.4;
+      acc[normalized] = (acc[normalized] || 0) + weight;
+      return acc;
+    }, {});
 
-    // If we have 2 notes, try to infer the third note of a chord
-    if (uniqueNotes.length === 2 && recentNotes.length >= 2) {
-      // Try to detect partial chords (power chords, intervals)
-      const result = detectPartialChord(uniqueNotes);
-      if (result && result.confidence > 0.6) {
-        const chordNotes = recentNotes
-          .map((n) => n.note)
-          .filter((note, index, self) => self.indexOf(note) === index)
-          .slice(0, 6);
+    const rankedNotes = Object.entries(weightedNoteMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([note]) => note);
 
-        const chordEvent: ChordEvent = {
-          timestamp: now,
-          chord: result.chord,
-          notes: chordNotes,
-          confidence: result.confidence,
-        };
-
-        const lastChord = chordHistoryRef.current[chordHistoryRef.current.length - 1];
-        if (!lastChord || lastChord.chord !== chordEvent.chord || now - lastChord.timestamp > 0.5) {
-          setCurrentChord(chordEvent);
-          chordHistoryRef.current.push(chordEvent);
-          if (chordHistoryRef.current.length > 10) {
-            chordHistoryRef.current.shift();
-          }
-        }
+    // If we have at least two strong notes, attempt partial inference first
+    if (rankedNotes.length >= 2) {
+      const partial = detectPartialChord(rankedNotes.slice(0, 2), weightedNoteMap);
+      if (partial && partial.confidence >= 0.55) {
+        emitChord(partial.chord, now, partial.confidence, recentNotes);
         return;
       }
     }
 
-    // Full chord detection (3+ notes)
-    const result = detectChordFromNotes(uniqueNotes);
+    // Full chord detection (use weighted notes for robustness)
+    const result = detectChordFromNotes(weightedNoteMap);
     
-    if (result && result.confidence > 0.6) { // Lowered threshold from 0.7
-      // Get full note names with octaves for the chord
-      const chordNotes = recentNotes
-        .map((n) => n.note)
-        .filter((note, index, self) => self.indexOf(note) === index)
-        .slice(0, 6); // Limit to 6 notes
-
-      const chordEvent: ChordEvent = {
-        timestamp: now,
-        chord: result.chord,
-        notes: chordNotes,
-        confidence: result.confidence,
-      };
-
-      // Avoid duplicate chords
-      const lastChord = chordHistoryRef.current[chordHistoryRef.current.length - 1];
-      if (!lastChord || lastChord.chord !== chordEvent.chord || now - lastChord.timestamp > 0.3) {
-        setCurrentChord(chordEvent);
-        chordHistoryRef.current.push(chordEvent);
-        if (chordHistoryRef.current.length > 10) {
-          chordHistoryRef.current.shift();
-        }
-      }
-    } else {
+    if (result) {
+      emitChord(result.chord, now, result.confidence, recentNotes);
+    } else if (!currentChord || now - lastDetectionTimeRef.current > 0.6) {
       setCurrentChord(null);
     }
   };
 
+  const emitChord = (label: string, timestamp: number, confidence: number, notes: NoteEvent[]) => {
+    const chordNotes = notes
+      .map((n) => n.note)
+      .filter((note, index, self) => self.indexOf(note) === index)
+      .slice(0, 6);
+
+    const chordEvent: ChordEvent = {
+      timestamp,
+      chord: label,
+      notes: chordNotes,
+      confidence,
+    };
+
+    const lastChord = chordHistoryRef.current[chordHistoryRef.current.length - 1];
+    if (!lastChord || lastChord.chord !== chordEvent.chord || timestamp - lastChord.timestamp > 0.25) {
+      lastDetectionTimeRef.current = timestamp;
+      setCurrentChord(chordEvent);
+      chordHistoryRef.current.push(chordEvent);
+      if (chordHistoryRef.current.length > 10) {
+        chordHistoryRef.current.shift();
+      }
+    }
+  };
+
   // Detect partial chords (power chords, intervals) from 2 notes
-  function detectPartialChord(notes: string[]): { chord: string; confidence: number } | null {
-    if (notes.length !== 2) return null;
+  function detectPartialChord(notes: string[], weights: Record<string, number>): { chord: string; confidence: number } | null {
+    if (notes.length < 2) return null;
 
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     const [note1, note2] = notes;
@@ -189,13 +219,14 @@ export const useChordDetection = () => {
     if (idx1 === -1 || idx2 === -1) return null;
 
     const interval = (idx2 - idx1 + 12) % 12;
+    const emphasis = (weights[note1] || 0) + (weights[note2] || 0);
 
     // Power chord (root + 5th)
     if (interval === 7 || interval === 5) {
       const root = interval === 7 ? note1 : note2;
       return {
         chord: `${root}5`, // Power chord notation
-        confidence: 0.75,
+        confidence: Math.min(0.7 + emphasis * 0.15, 0.95),
       };
     }
 
@@ -203,7 +234,7 @@ export const useChordDetection = () => {
     if (interval === 4) {
       return {
         chord: `${note1} (M3)`,
-        confidence: 0.65,
+        confidence: Math.min(0.55 + emphasis * 0.1, 0.8),
       };
     }
 
@@ -211,7 +242,7 @@ export const useChordDetection = () => {
     if (interval === 3) {
       return {
         chord: `${note1} (m3)`,
-        confidence: 0.65,
+        confidence: Math.min(0.55 + emphasis * 0.1, 0.8),
       };
     }
 

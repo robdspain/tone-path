@@ -12,6 +12,7 @@
     "export:xml": "echo 'MusicXML export via Netlify function'"
   },
   "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
     "@tensorflow/tfjs": "^4.15.0",
     "framer-motion": "^11.0.3",
     "midi-writer-js": "^2.1.2",

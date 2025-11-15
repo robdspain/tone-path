@@ -34,6 +34,9 @@ const DEFAULT_LABELS: LabelState = {
   root: false,
 };
 
+const ROOT_BADGE_CLASSES =
+  'bg-gradient-to-br from-rose-400 via-orange-400 to-yellow-200 text-slate-900 shadow-[0_6px_18px_rgba(249,115,22,0.45)]';
+
 const buildMajorScale = (root: string): string[] => {
   const intervals = [0, 2, 4, 5, 7, 9, 11];
   const rootIndex = NOTE_NAMES.indexOf(root);
@@ -237,7 +240,7 @@ export const ScaleChordView: React.FC<ScaleChordViewProps> = ({
 
                   let badgeColor = 'bg-white/10 text-white/70';
                   if (showMarker) {
-                    if (isRoot) badgeColor = 'bg-gradient-to-br from-amber-300 to-amber-500 text-slate-900';
+                    if (isRoot) badgeColor = ROOT_BADGE_CLASSES;
                     else if (isThird) badgeColor = 'bg-teal-300/90 text-slate-900';
                     else if (isFifth) badgeColor = 'bg-white text-slate-900';
                     else badgeColor = 'bg-sky-400/80 text-slate-900';
@@ -421,42 +424,6 @@ export const ScaleChordView: React.FC<ScaleChordViewProps> = ({
       {(instrument === 'guitar' || instrument === 'bass') && (
         <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
           <PianoChordDisplay chordName={activeChordName} showControls={false} showVoicings={false} />
-        </div>
-      )}
-
-      {/* Voicing carousel */}
-      {allFingerings.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-sm text-white/70">
-            <span>Voicing Carousel</span>
-            <span>{allFingerings.length} shapes</span>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            {Array.from({ length: slideCount }, (_, slideIdx) => {
-              const startIndex = slideIdx * positionsPerSlide;
-              const fingering = allFingerings[startIndex];
-              const chips = fingering ? getVoicingChips(fingering) : [];
-              return (
-                <div key={`slide-${slideIdx}`} className="min-w-[280px] max-w-[360px] flex-shrink-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-white font-semibold text-base">Shape {startIndex + 1}</p>
-                      <p className="text-xs text-white/50">{chips.join(' • ')}</p>
-                    </div>
-                    <span className="text-xs text-white/50">
-                      {startIndex + 1}-{Math.min(startIndex + positionsPerSlide, allFingerings.length)}
-                    </span>
-                  </div>
-                  <ChordPositionsGrid
-                    chordName={activeChordName}
-                    instrument={chordInstrument}
-                    maxPositions={positionsPerSlide}
-                    startIndex={startIndex}
-                  />
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
 

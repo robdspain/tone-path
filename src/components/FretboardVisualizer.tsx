@@ -675,9 +675,6 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
             <p className="text-3xl sm:text-4xl font-bold text-white mt-1">
               {chord || detectedKey || 'Tone Path'}
             </p>
-            <p className="text-sm text-white/50 mt-1">
-              Modern chord & scale visualizer inspired by fretastic.com
-            </p>
           </div>
           <div className="flex items-center gap-2 bg-white/5 rounded-full p-1 border border-white/10">
             {availableTabs

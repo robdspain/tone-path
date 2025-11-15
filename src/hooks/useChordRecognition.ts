@@ -18,7 +18,7 @@ export function useChordRecognition(
   sourceNode: AudioNode | null,
   options: UseChordRecognitionOptions = {}
 ) {
-  const { enabled = true, smoothingWindow = 500, minConfidence = 0.3 } = options;
+  const { enabled = true, smoothingWindow = 900, minConfidence = 0.2 } = options;
   
   const [chords, setChords] = useState<ChordStream>({ 
     source: 'microphone', 
@@ -37,8 +37,8 @@ export function useChordRecognition(
 
     // Create analyser node for better audio processing
     const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 4096;
-    analyser.smoothingTimeConstant = 0.8;
+    analyser.fftSize = 8192;
+    analyser.smoothingTimeConstant = 0.85;
     
     analyserRef.current = analyser;
     sourceNode.connect(analyser);
@@ -67,7 +67,7 @@ export function useChordRecognition(
         const frame: ChordFrame = {
           time: currentTime,
           chord: chordResult.label,
-          confidence: chordResult.confidence,
+          confidence: Math.min(chordResult.confidence * 1.1, 1),
         };
         
         rawFramesRef.current.push(frame);
@@ -103,4 +103,3 @@ export function useChordRecognition(
 
   return { chords, clearChords };
 }
-
