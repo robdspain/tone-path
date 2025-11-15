@@ -1999,27 +1999,6 @@ export default function Home() {
         </div>
       )}
 
-                    'Bmaj7': ['B', 'D#', 'F#', 'A#'],
-                    'Cm7': ['C', 'D#', 'G', 'A#'],
-                    'Dm7': ['D', 'F', 'A', 'C'],
-                    'Em7': ['E', 'G', 'B', 'D'],
-                    'Fm7': ['F', 'G#', 'C', 'D#'],
-                    'Gm7': ['G', 'A#', 'D', 'F'],
-                    'Am7': ['A', 'C', 'E', 'G'],
-                    'Bm7': ['B', 'D', 'F#', 'A'],
-                  };
-                  
-                  const noteNames = CHORD_PATTERNS[chordName];
-                  if (!noteNames) {
-                    // Fallback: try to extract root note
-                    const root = chordName.replace(/[^A-G#]/g, '');
-                    return root ? [`${root}4`] : ['C4'];
-                  }
-                  
-                  // Convert to full note names with octaves (default to octave 4)
-                  return noteNames.map(note => `${note}4`);
-                };
-
                 const chordNotes = getChordNotes(currentChordFrame.chord);
 
                 if (instrument === 'guitar' || instrument === 'bass' || instrument === 'ukulele') {
