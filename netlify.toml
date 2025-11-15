@@ -8,9 +8,13 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  PYTHON_VERSION = "3.9"
 
-# Configure Python function runtime for youtube-audio
+# Configure Python function for youtube-audio
+# Netlify automatically installs dependencies from requirements.txt
+[functions]
+  directory = "netlify/functions"
+
 [functions."youtube-audio"]
-  runtime = "python3.9"
+  # Use external node modules for Python dependencies
+  external_node_modules = []
 
