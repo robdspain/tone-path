@@ -10,6 +10,8 @@ interface PianoChordDisplayProps {
   onTranspose?: (semitones: number) => void;
 }
 
+const PIANO_ACTIVE_COLOR = '#f3c995';
+
 // Extended chord patterns including 7th chords and more
 const CHORD_PATTERNS: Record<string, string[]> = {
   // Major chords
@@ -197,6 +199,12 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
   // Piano range (C3 to C6)
   const firstNote = MidiNumbers.fromNote('c3');
   const lastNote = MidiNumbers.fromNote('c6');
+
+  const showVoicingSlider = showVoicings && allVoicings.length > 1;
+  const voicingPercent =
+    showVoicingSlider && allVoicings.length > 1
+      ? selectedVoicing / (allVoicings.length - 1 || 1)
+      : 0;
   
   // Transpose handler
   const handleTranspose = (semitones: number) => {
@@ -216,13 +224,13 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
   }
   
   return (
-    <div className="w-full bg-gradient-to-b from-slate-900 to-slate-800 rounded-2xl p-4 sm:p-6">
+    <div className="w-full bg-[#0b1728] rounded-3xl p-5 sm:p-8 border border-white/10 shadow-[0_25px_70px_rgba(0,0,0,0.45)] text-white">
       {/* Navigation Controls */}
       {showControls && (
-        <div className="flex items-center justify-between mb-4 gap-2 sm:gap-4">
+        <div className="flex items-center justify-between mb-6 gap-3 sm:gap-6">
           {/* Chords: Basic/All */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs sm:text-sm text-white/70">Chords</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm sm:text-base text-white/80 font-medium">Chords</span>
             <div className="flex bg-slate-800/50 rounded-lg p-1 border border-white/10">
               <button
                 onClick={() => setChordType('basic')}
@@ -245,7 +253,7 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
                 All
               </button>
             </div>
-            <button className="text-white/40 hover:text-white/60 text-xs sm:text-sm">
+            <button className="text-white/60 hover:text-white/80 text-xs sm:text-sm">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
@@ -254,21 +262,21 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
           
           {/* Voicings Toggle */}
           {showVoicings && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm text-white/70">Voicings</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm sm:text-base text-white/80 font-medium">Voicings</span>
               <button
                 onClick={() => setVoicingsEnabled(!voicingsEnabled)}
-                className={`relative inline-flex h-5 sm:h-6 w-10 sm:w-12 items-center rounded-full transition-colors ${
+                className={`relative inline-flex h-6 sm:h-7 w-12 sm:w-14 items-center rounded-full transition-colors ${
                   voicingsEnabled ? 'bg-green-500' : 'bg-gray-600'
                 }`}
               >
                 <span
-                  className={`inline-block h-4 sm:h-5 w-4 sm:w-5 transform rounded-full bg-white transition-transform ${
-                    voicingsEnabled ? 'translate-x-5 sm:translate-x-6' : 'translate-x-1'
+                  className={`inline-block h-5 sm:h-6 w-5 sm:w-6 transform rounded-full bg-white transition-transform ${
+                    voicingsEnabled ? 'translate-x-6 sm:translate-x-7' : 'translate-x-1'
                   }`}
                 />
               </button>
-              <button className="text-white/40 hover:text-white/60 text-xs sm:text-sm">
+              <button className="text-white/60 hover:text-white/80 text-xs sm:text-sm">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
@@ -279,7 +287,7 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
           {/* Transpose Button */}
           <button
             onClick={() => handleTranspose(1)}
-            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-medium rounded-lg border border-white/20 transition-all"
+            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800/80 hover:bg-slate-700/80 text-white/90 text-xs sm:text-sm font-medium rounded-xl border border-white/15 transition-all"
           >
             Transpose
           </button>
@@ -287,49 +295,56 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
       )}
       
       {/* Progress Bar / Slider */}
-      {showVoicings && allVoicings.length > 1 && (
-        <div className="mb-4">
-          <input
-            type="range"
-            min="0"
-            max={allVoicings.length - 1}
-            value={selectedVoicing}
-            onChange={(e) => setSelectedVoicing(parseInt(e.target.value))}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500"
-          />
+      {showVoicingSlider && (
+        <div className="mb-6">
+          <div className="relative h-2 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-sky-400 via-cyan-200 to-white shadow-[0_0_20px_rgba(14,165,233,0.45)]"
+              style={{ width: `${voicingPercent * 100}%` }}
+            />
+            <input
+              type="range"
+              min="0"
+              max={allVoicings.length - 1}
+              value={selectedVoicing}
+              onChange={(e) => setSelectedVoicing(parseInt(e.target.value))}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+              aria-label="Select voicing"
+            />
+          </div>
         </div>
       )}
       
       {/* Chord Name */}
-      <div className="text-center mb-4">
+      <div className="text-center mb-6">
         <motion.div
           key={chordName}
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="text-3xl sm:text-4xl font-bold text-green-400"
+          className="text-4xl sm:text-5xl font-bold text-green-400"
         >
           {chordName}
         </motion.div>
         {transposeSemitones !== 0 && (
-          <div className="text-xs sm:text-sm text-white/60 mt-1">
+          <div className="text-sm sm:text-base text-white/70 mt-2 font-medium">
             {transposeSemitones > 0 ? '+' : ''}{transposeSemitones} semitones
           </div>
         )}
       </div>
-      
+
       {/* Piano Keyboard */}
-      <div className="w-full overflow-x-auto pb-4 mb-4">
+      <div className="w-full overflow-x-auto pb-6 mb-6">
         <div className="min-w-full flex justify-center">
-          <div className="relative" style={{ width: '100%', maxWidth: '800px' }}>
+          <div className="relative tonepath-piano" style={{ width: '100%', maxWidth: '900px' }}>
             <Piano
               noteRange={{ first: firstNote, last: lastNote }}
               activeNotes={activeNotes}
               playNote={() => {}}
               stopNote={() => {}}
-              width={800}
-              keyWidthToHeight={0.11}
+              width={900}
+              keyWidthToHeight={0.13}
               renderNoteLabel={({ midiNumber }: { midiNumber: number }) => {
-                const note = MidiNumbers.toNote(midiNumber);
+                const note = MidiNumbers.getAttributes(midiNumber).note;
                 const noteName = getNoteName(note);
                 const isActive = activeNotes.includes(midiNumber);
                 
@@ -341,7 +356,7 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
                 
                 return (
                   <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-6">
-                    <div className="text-xs sm:text-sm font-semibold text-black bg-transparent">
+                    <div className="text-sm font-semibold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.8)] tracking-[0.1em] uppercase">
                       {noteName}
                     </div>
                   </div>
@@ -354,28 +369,25 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
       </div>
       
       {/* Note Labels Below Piano */}
-      <div className="flex gap-2 justify-center flex-wrap mt-2">
+      <div className="flex gap-6 justify-center flex-wrap mt-6 text-base sm:text-xl font-semibold tracking-[0.35em] text-white/90 uppercase">
         {noteLabels.map((note, idx) => (
-          <div
-            key={`${note}-${idx}`}
-            className="text-xs sm:text-sm font-semibold text-black"
-          >
+          <span key={`${note}-${idx}`} className="pb-1 border-b border-white/15">
             {note}
-          </div>
+          </span>
         ))}
       </div>
-      
+
       {/* Voicing Selector */}
       {showVoicings && allVoicings.length > 1 && (
-        <div className="mt-4 flex gap-2 justify-center flex-wrap">
+        <div className="mt-6 flex gap-3 justify-center flex-wrap">
           {allVoicings.map((voicing, idx) => (
             <button
               key={idx}
               onClick={() => setSelectedVoicing(idx)}
-              className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg transition-all ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-base font-semibold rounded-lg transition-all ${
                 selectedVoicing === idx
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                  ? 'bg-white/10 text-white border border-white/40 shadow-[0_12px_25px_rgba(0,0,0,0.35)]'
+                  : 'bg-white/5 text-white/60 hover:text-white border border-white/10'
               }`}
             >
               Voicing {idx + 1}
@@ -383,7 +395,44 @@ export const PianoChordDisplay: React.FC<PianoChordDisplayProps> = ({
           ))}
         </div>
       )}
+
+      <style jsx global>{`
+        .tonepath-piano .ReactPiano__Keyboard {
+          padding: 1.25rem 1.5rem 2.75rem;
+          background: linear-gradient(180deg, #111f35 0%, #091223 100%);
+          border-radius: 1.5rem;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .tonepath-piano .ReactPiano__NoteLabel {
+          display: none;
+        }
+
+        .tonepath-piano .ReactPiano__Key--natural {
+          background: #f7f7fb;
+          border-radius: 0.45rem;
+          border: none;
+        }
+
+        .tonepath-piano .ReactPiano__Key--accidental {
+          background: #050911;
+          border-radius: 0.35rem;
+        }
+
+        .tonepath-piano .ReactPiano__Key--active {
+          background: ${PIANO_ACTIVE_COLOR};
+          color: #121212;
+          box-shadow: 0 12px 28px rgba(243, 201, 149, 0.55);
+        }
+
+        .tonepath-piano .ReactPiano__Key--active.ReactPiano__Key--accidental {
+          background: ${PIANO_ACTIVE_COLOR};
+        }
+
+        .tonepath-piano .ReactPiano__KeyTop {
+          border-radius: 0.35rem;
+        }
+      `}</style>
     </div>
   );
 };
-

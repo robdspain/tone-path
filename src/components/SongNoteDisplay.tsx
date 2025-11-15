@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { NoteEvent, TranscriptionData, Instrument } from '@/types/transcription';
+import { getTrumpetFingeringLabel } from '@/utils/trumpetFingerings';
 import { TrumpetNoteDisplay } from './TrumpetNoteDisplay';
 
 interface SongNoteDisplayProps {
@@ -10,30 +11,6 @@ interface SongNoteDisplayProps {
   isPlaying: boolean;
   instrument: Instrument;
 }
-
-// Trumpet fingerings (simplified - shows common fingerings)
-const TRUMPET_FINGERINGS: Record<string, string> = {
-  'C4': 'Open',
-  'C#4': '2',
-  'D4': '1',
-  'D#4': '1-2',
-  'E4': '2-3',
-  'F4': '1',
-  'F#4': '2',
-  'G4': 'Open',
-  'G#4': '2-3',
-  'A4': '1-2',
-  'A#4': '2',
-  'B4': '1',
-  'C5': 'Open',
-  'C#5': '2',
-  'D5': '1',
-  'D#5': '1-2',
-  'E5': '2-3',
-  'F5': '1',
-  'F#5': '2',
-  'G5': 'Open',
-};
 
 // Note colors for visual distinction
 const NOTE_COLORS: Record<string, string> = {
@@ -153,7 +130,7 @@ export const SongNoteDisplay: React.FC<SongNoteDisplayProps> = ({
 
   const getFingering = (note: string): string | null => {
     if (instrument === 'trumpet') {
-      return TRUMPET_FINGERINGS[note] || null;
+      return getTrumpetFingeringLabel(note);
     }
     return null;
   };
@@ -352,4 +329,3 @@ export const SongNoteDisplay: React.FC<SongNoteDisplayProps> = ({
     </motion.div>
   );
 };
-

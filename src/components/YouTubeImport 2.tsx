@@ -132,12 +132,10 @@ export const YouTubeImport: React.FC<YouTubeImportProps> = ({ onImport, onError 
       const contentType = response.headers.get('content-type');
       let audioData: ArrayBuffer;
 
-      setStatusMessage('Receiving audio data...');
-
       if (contentType?.includes('application/json')) {
         // Handle JSON response with base64 data (Netlify function format)
         const jsonData = await response.json();
-        setProgress(70); // Show progress after getting response
+        setProgress(50); // Show progress after getting response
         if (jsonData.body && jsonData.isBase64Encoded) {
           const binaryString = atob(jsonData.body);
           const bytes = new Uint8Array(binaryString.length);
@@ -148,7 +146,6 @@ export const YouTubeImport: React.FC<YouTubeImportProps> = ({ onImport, onError 
         } else {
           throw new Error('Invalid response format from server');
         }
-        setProgress(75);
       } else {
         // Direct binary response (Next.js API route) - track download progress
         const contentLength = response.headers.get('content-length');
@@ -162,8 +159,6 @@ export const YouTubeImport: React.FC<YouTubeImportProps> = ({ onImport, onError 
         const chunks: Uint8Array[] = [];
         let receivedLength = 0;
 
-        setProgress(70); // Start at 70% since backend processing is done
-
         while (true) {
           const { done, value } = await reader.read();
 
@@ -172,15 +167,13 @@ export const YouTubeImport: React.FC<YouTubeImportProps> = ({ onImport, onError 
           chunks.push(value);
           receivedLength += value.length;
 
-          // Update progress: 70-85% for download, reserve 85-100% for decoding
+          // Update progress: 0-70% for download, reserve 70-100% for decoding
           if (total > 0) {
-            const downloadProgress = 70 + Math.floor((receivedLength / total) * 15);
+            const downloadProgress = Math.floor((receivedLength / total) * 70);
             setProgress(downloadProgress);
-            setStatusMessage(`Downloading audio... ${Math.round((receivedLength / total) * 100)}%`);
           } else {
-            // If content-length is not available, show progress based on received data
-            const estimatedProgress = Math.min(70 + (receivedLength / 1000000 * 10), 85);
-            setProgress(estimatedProgress);
+            // If content-length is not available, show indeterminate progress
+            setProgress(Math.min(receivedLength / 1000000 * 50, 70));
           }
         }
 
@@ -194,8 +187,7 @@ export const YouTubeImport: React.FC<YouTubeImportProps> = ({ onImport, onError 
         audioData = chunksAll.buffer;
       }
 
-      setProgress(85);
-      setStatusMessage('Decoding audio...');
+      setProgress(75);
 
       // Extract metadata from response headers
       const title = response.headers.get('X-Song-Title');
@@ -206,14 +198,12 @@ export const YouTubeImport: React.FC<YouTubeImportProps> = ({ onImport, onError 
       } : undefined;
 
       // Create AudioContext and decode audio
-      setProgress(90);
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const audioBuffer = await audioContext.decodeAudioData(audioData);
-
+      
       setProgress(100);
-      setStatusMessage('Complete!');
       onImport(audioBuffer, audioContext, metadata);
-
+      
       setUrl('');
     } catch (error) {
       let errorMsg = 'Failed to import audio';
@@ -266,11 +256,8 @@ export const YouTubeImport: React.FC<YouTubeImportProps> = ({ onImport, onError 
               transition={{ duration: 0.3 }}
             />
           </div>
-          <p className="text-xs text-gray-400 mt-1.5 text-center font-medium">
-            {statusMessage}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5 text-center">
-            {Math.round(progress)}% complete
+          <p className="text-xs text-gray-500 mt-1 text-center">
+            Extracting audio from YouTube...
           </p>
         </div>
       )}

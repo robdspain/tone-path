@@ -47,7 +47,14 @@ export const useAudioPlayback = (audioBuffer: AudioBuffer | null) => {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
 
-    // Cleanup on unmount
+    // Always have a gain node that downstream processors (e.g. chord detection) can tap into
+    if (audioContextRef.current && !gainNodeRef.current) {
+      const gain = audioContextRef.current.createGain();
+      gain.connect(audioContextRef.current.destination);
+      gainNodeRef.current = gain;
+    }
+
+    // Cleanup on unmount or when audio buffer changes
     return () => {
       if (sourceRef.current) {
         sourceRef.current.stop();
@@ -55,6 +62,10 @@ export const useAudioPlayback = (audioBuffer: AudioBuffer | null) => {
       }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (gainNodeRef.current) {
+        gainNodeRef.current.disconnect();
+        gainNodeRef.current = null;
       }
     };
   }, [audioBuffer]);
@@ -121,8 +132,9 @@ export const useAudioPlayback = (audioBuffer: AudioBuffer | null) => {
     }
 
     if (!gainNodeRef.current) {
-      gainNodeRef.current = ctx.createGain();
-      gainNodeRef.current.connect(ctx.destination);
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      gainNodeRef.current = gain;
     }
 
     source.connect(gainNodeRef.current);
@@ -220,5 +232,7 @@ export const useAudioPlayback = (audioBuffer: AudioBuffer | null) => {
     setLoopStart,
     setLoopEnd,
     toggleLoop,
+    audioContext: audioContextRef.current,
+    outputNode: gainNodeRef.current,
   };
 };

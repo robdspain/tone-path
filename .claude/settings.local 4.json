@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(lsof:*)",
+      "WebSearch",
+      "WebFetch(domain:www.positivegrid.com)",
+      "Bash(pkill:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx eslint:*)",
+      "Bash(node -e:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm install:*)",
+      "Bash(pnpm add:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(rm:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(node:*)",
+      "Bash(npx next:*)",
+      "Bash(pnpm install:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

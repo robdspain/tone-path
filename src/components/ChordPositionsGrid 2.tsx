@@ -7,7 +7,6 @@ interface ChordPositionsGridProps {
   chordName: string;
   instrument?: 'guitar' | 'ukulele';
   maxPositions?: number;
-  startIndex?: number;
 }
 
 // Calculate difficulty score for a chord fingering
@@ -96,8 +95,7 @@ function getChordNotes(chordName: string): string[] {
 export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
   chordName,
   instrument = 'guitar',
-  maxPositions = 6,
-  startIndex = 0,
+  maxPositions = 9,
 }: ChordPositionsGridProps) => {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const chartRefs = useRef<(SVGuitarChord | null)[]>([]);
@@ -111,7 +109,7 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
   const sortedFingerings = [...allFingerings]
     .map(f => ({ fingering: f, difficulty: calculateDifficulty(f) }))
     .sort((a, b) => a.difficulty - b.difficulty)
-    .slice(startIndex, startIndex + maxPositions)
+    .slice(0, maxPositions)
     .map(item => item.fingering);
   
   const chordNotes = getChordNotes(chordName);
@@ -132,7 +130,7 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
           const chart = new SVGuitarChord(container);
           const baseFret = fingering.baseFret || 0;
           const position = baseFret > 0 ? baseFret : 1;
-
+          
           chart.configure({
             strings: isUkulele ? 4 : 6,
             frets: 4,
@@ -142,16 +140,16 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
             color: '#FFFFFF',
             backgroundColor: 'transparent',
             fingerColor: '#FFFFFF',
-            fingerSize: 0.85,
-            fretSize: 1.8,
-            nutSize: 6,
-            sidePadding: 12,
+            fingerSize: 0.6,
+            fretSize: 1.2,
+            nutSize: 4,
+            sidePadding: 8,
             titleFontSize: 0, // Hide title, we'll show it separately
             titleBottomMargin: 0,
-            fretLabelFontSize: 18,
+            fretLabelFontSize: 12,
             tuningsFontSize: 0, // Hide tunings
-            barreChordRadius: 0.35,
-            emptyStringIndicatorSize: 0.7,
+            barreChordRadius: 0.25,
+            emptyStringIndicatorSize: 0.5,
             fixedDiagramPosition: false,
           } as any);
           
@@ -231,23 +229,24 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
   }
   
   return (
-    <div className="w-full bg-gradient-to-b from-slate-900 to-slate-800 rounded-2xl p-5 sm:p-8">
+    <div className="w-full bg-gradient-to-b from-slate-900 to-slate-800 rounded-2xl p-4 sm:p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3 text-center">
+      <div className="mb-4">
+        <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 text-center">
           {chordName}
         </h2>
-        <p className="text-base sm:text-lg text-white/90 text-center mb-4">
-          Ranked chord shapes tailored for your instrument.
+        <p className="text-sm sm:text-base text-white/80 text-center mb-3">
+          Positions ranked from <span className="text-yellow-400 font-semibold">easiest</span> to{' '}
+          <span className="text-yellow-400 font-semibold">most difficult</span>
         </p>
-
+        
         {/* Chord notes buttons */}
         {chordNotes.length > 0 && (
-          <div className="flex gap-3 justify-center flex-wrap mb-6">
+          <div className="flex gap-2 justify-center flex-wrap mb-4">
             {chordNotes.map((note, idx) => (
               <div
                 key={`${note}-${idx}`}
-                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/15 border-2 border-white/30 flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-lg"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-white font-semibold text-sm sm:text-base shadow-lg"
               >
                 {note}
               </div>
@@ -257,56 +256,50 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
       </div>
       
       {/* Chord positions grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {sortedFingerings.map((fingering, index) => {
           const stringNotes = getStringNotes(fingering, isUkulele);
           const difficulty = calculateDifficulty(fingering);
           const position = fingering.baseFret || 1;
           const positionLabel = position > 1 ? `${position}fr` : 'Open';
-
+          
           return (
             <motion.div
               key={index}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.05 }}
-              className="bg-slate-800/50 rounded-xl p-3 sm:p-4 border border-white/20 hover:border-white/40 transition-all"
+              className="bg-slate-800/50 rounded-xl p-2 sm:p-3 border border-white/10"
             >
               {/* Position number and difficulty */}
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm sm:text-base text-white/70 font-semibold">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs sm:text-sm text-white/60 font-medium">
                   #{index + 1}
                 </span>
-                <span className="text-sm sm:text-base text-white/50 font-medium">{positionLabel}</span>
+                <span className="text-xs text-white/40">{positionLabel}</span>
               </div>
-
+              
               {/* Chord diagram */}
               <div
                 ref={(el: HTMLDivElement | null) => {
                   containerRefs.current[index] = el;
                 }}
-                className="chord-diagram mb-3"
+                className="chord-diagram mb-2"
                 style={{
                   width: '100%',
-                  minHeight: '180px',
+                  minHeight: '120px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               />
-
+              
               {/* String notes */}
-              <div className="text-xs sm:text-sm text-white/80 text-center font-mono font-semibold flex flex-wrap justify-center gap-2">
+              <div className="text-[10px] sm:text-xs text-white/70 text-center font-mono space-y-0.5">
                 {stringNotes.map((note, noteIdx) => (
-                  <span
-                    key={noteIdx}
-                    className={`tracking-widest ${
-                      note === 'X' ? 'text-red-400' : note === 'O' ? 'text-green-400' : 'text-white/90'
-                    }`}
-                  >
+                  <div key={noteIdx} className={note === 'X' ? 'text-red-400' : note === 'O' ? 'text-green-400' : ''}>
                     {note}
-                    {noteIdx < stringNotes.length - 1 && <span className="text-white/60 mx-1">|</span>}
-                  </span>
+                  </div>
                 ))}
               </div>
             </motion.div>
@@ -316,3 +309,4 @@ export const ChordPositionsGrid: React.FC<ChordPositionsGridProps> = ({
     </div>
   );
 };
+

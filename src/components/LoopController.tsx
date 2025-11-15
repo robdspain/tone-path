@@ -1,5 +1,5 @@
 // Enhanced Loop controller with waveform visualization and section markers
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { generateWaveform } from '@/utils/waveform';
 
@@ -36,7 +36,6 @@ export const LoopController: React.FC<LoopControllerProps> = ({
 }) => {
   const [isDraggingStart, setIsDraggingStart] = useState(false);
   const [isDraggingEnd, setIsDraggingEnd] = useState(false);
-  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [waveformData, setWaveformData] = useState<{ peaks: number[]; duration: number } | null>(null);
   const [isGeneratingWaveform, setIsGeneratingWaveform] = useState(false);
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -45,26 +44,28 @@ export const LoopController: React.FC<LoopControllerProps> = ({
   // Generate waveform when audio buffer changes (without section detection)
   useEffect(() => {
     if (audioBuffer) {
+      console.log('[LoopController] Starting waveform generation for buffer:', {
+        duration: audioBuffer.duration,
+        sampleRate: audioBuffer.sampleRate,
+        channels: audioBuffer.numberOfChannels
+      });
       setIsGeneratingWaveform(true);
       try {
-        // Use setTimeout to avoid blocking the UI
-        setTimeout(() => {
-          try {
-            const waveform = generateWaveform(audioBuffer, 2000);
-            setWaveformData({ peaks: waveform.peaks, duration: waveform.duration });
-          } catch (error) {
-            console.error('Error generating waveform:', error);
-            setWaveformData(null);
-          } finally {
-            setIsGeneratingWaveform(false);
-          }
-        }, 0);
-      } catch (error) {
-        console.error('Error setting up waveform generation:', error);
+        const waveform = generateWaveform(audioBuffer, 2000);
+        console.log('[LoopController] Waveform generated:', {
+          peaksCount: waveform.peaks.length,
+          duration: waveform.duration,
+          firstPeaks: waveform.peaks.slice(0, 10)
+        });
+        setWaveformData({ peaks: waveform.peaks, duration: waveform.duration });
         setIsGeneratingWaveform(false);
+      } catch (error) {
+        console.error('[LoopController] Error generating waveform:', error);
         setWaveformData(null);
+        setIsGeneratingWaveform(false);
       }
     } else {
+      console.log('[LoopController] No audio buffer provided');
       setWaveformData(null);
       setIsGeneratingWaveform(false);
     }

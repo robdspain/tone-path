@@ -24,8 +24,19 @@ interface ChordProgressionGridProps {
   bpm?: number; // BPM for timing calculation
   beatsPerMeasure?: number; // Default 4
   beatsPerCell?: number; // Default 1 (each cell = 1 beat)
-  rows?: number; // Number of rows to display
+  rows?: number; // Minimum rows to display
+  keySignature?: string | null;
+  timeSignature?: string;
+  instrumentLabel?: string;
+  onCellClick?: (time: number) => void;
 }
+
+const formatTimestamp = (seconds: number): string => {
+  if (!Number.isFinite(seconds)) return '--:--';
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+};
 
 export const ChordProgressionGrid: React.FC<ChordProgressionGridProps> = ({
   chords,
@@ -34,6 +45,10 @@ export const ChordProgressionGrid: React.FC<ChordProgressionGridProps> = ({
   beatsPerMeasure = 4,
   beatsPerCell = 1,
   rows = 4,
+  keySignature,
+  timeSignature,
+  instrumentLabel,
+  onCellClick,
 }) => {
   console.log('ChordProgressionGrid props:', {
     chordsCount: chords.length,
@@ -51,10 +66,8 @@ export const ChordProgressionGrid: React.FC<ChordProgressionGridProps> = ({
   }
 
   // Calculate total duration
-  const totalDuration = Math.max(
-    ...chords.map(c => c.timestamp),
-    currentTime
-  ) || 1;
+  const lastChordTimestamp = chords.length > 0 ? chords[chords.length - 1].timestamp : 0;
+  const totalDuration = Math.max(...chords.map(c => c.timestamp), currentTime, lastChordTimestamp + 1) || 1;
 
   // Use provided BPM or default to 120
   const estimatedBPM = bpm || 120;
@@ -63,6 +76,8 @@ export const ChordProgressionGrid: React.FC<ChordProgressionGridProps> = ({
   const cellsPerMeasure = beatsPerMeasure / beatsPerCell;
   const totalCells = Math.ceil(totalDuration / secondsPerCell);
   const cellsPerRow = cellsPerMeasure;
+  const computedRows = Math.ceil(totalCells / cellsPerRow);
+  const rowCount = Math.max(rows, computedRows);
 
   // Create grid cells
   const gridCells: Array<{
@@ -73,12 +88,10 @@ export const ChordProgressionGrid: React.FC<ChordProgressionGridProps> = ({
     col: number;
   }> = [];
 
-  for (let row = 0; row < rows; row++) {
+  for (let row = 0; row < rowCount; row++) {
     for (let col = 0; col < cellsPerRow; col++) {
       const cellIndex = row * cellsPerRow + col;
       const cellTime = cellIndex * secondsPerCell;
-      
-      if (cellTime > totalDuration) break;
 
       // Find the chord active at this time
       let activeChord: ChordEvent | null = null;
@@ -104,92 +117,89 @@ export const ChordProgressionGrid: React.FC<ChordProgressionGridProps> = ({
     }
   }
 
-  // Extract unique chord names for column labels
-  const uniqueChords = Array.from(new Set(chords.map(c => c.chord)));
-  
-  // Group cells by column to determine which columns need labels
-  const columnChords = new Map<number, Set<string>>();
-  gridCells.forEach(cell => {
-    if (cell.chord) {
-      if (!columnChords.has(cell.col)) {
-        columnChords.set(cell.col, new Set());
-      }
-      columnChords.get(cell.col)!.add(cell.chord);
-    }
-  });
-
-  // Get the most common chord per column for labels
-  const columnLabels = new Map<number, string>();
-  columnChords.forEach((chordSet, col) => {
-    const chords = Array.from(chordSet);
-    // Count occurrences
-    const counts = new Map<string, number>();
-    gridCells
-      .filter(c => c.col === col && c.chord)
-      .forEach(c => {
-        counts.set(c.chord!, (counts.get(c.chord!) || 0) + 1);
-      });
-    
-    if (counts.size > 0) {
-      const mostCommon = Array.from(counts.entries())
-        .sort((a, b) => b[1] - a[1])[0][0];
-      columnLabels.set(col, simplifyChordName(mostCommon));
-    }
-  });
-
   return (
-    <div className="w-full bg-gray-900 rounded-lg p-4 overflow-x-auto">
-      {/* Column Labels */}
-      <div className="flex mb-2">
-        <div className="w-12"></div>
-        {Array.from({ length: cellsPerRow }, (_, col) => {
-          const label = columnLabels.get(col);
-          return (
-            <div key={col} className="flex-1 text-center min-w-[60px]">
-              {label && (
-                <span className="text-white text-lg font-semibold">{label}</span>
-              )}
-            </div>
-          );
-        })}
+    <div className="w-full rounded-3xl border border-white/10 bg-slate-900/60 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs uppercase tracking-wide">
+        <div className="flex flex-wrap gap-2 text-white/70">
+          <span className="px-2 py-1 rounded-full bg-white/5 border border-white/10">
+            Key {keySignature || '—'}
+          </span>
+          <span className="px-2 py-1 rounded-full bg-white/5 border border-white/10">
+            {timeSignature || `${beatsPerMeasure}/${beatsPerCell}`}
+          </span>
+          <span className="px-2 py-1 rounded-full bg-white/5 border border-white/10">
+            BPM ≈ {Math.round(estimatedBPM)}
+          </span>
+          {instrumentLabel && (
+            <span className="px-2 py-1 rounded-full bg-white/5 border border-white/10 capitalize">
+              {instrumentLabel}
+            </span>
+          )}
+        </div>
+        <div className="text-white/60">
+          Cells per measure: {cellsPerRow}
+        </div>
       </div>
 
-      {/* Grid */}
-      <div className="space-y-1">
-        {Array.from({ length: rows }, (_, row) => {
-          const rowCells = gridCells.filter(c => c.row === row);
-          if (rowCells.length === 0) return null;
+      <div className="overflow-hidden rounded-2xl border border-white/10">
+        <div className="flex bg-white/5 text-[11px] uppercase text-white/60">
+          <div className="w-14 px-2 py-2 border-r border-white/10">Bar</div>
+          {Array.from({ length: cellsPerRow }, (_, idx) => (
+            <div
+              key={`label-${idx}`}
+              className="flex-1 min-w-[60px] px-2 py-2 text-center border-r border-white/5 last:border-r-0"
+            >
+              Beat {idx + 1}
+            </div>
+          ))}
+        </div>
 
+        {Array.from({ length: rowCount }, (_, row) => {
+          const rowCells = gridCells.filter(c => c.row === row);
           return (
-            <div key={row} className="flex gap-1">
-              {/* Row number (optional) */}
-              <div className="w-12 flex items-center justify-center">
-                <span className="text-xs text-gray-500">{row + 1}</span>
+            <div
+              key={row}
+              className="flex border-t border-white/10 last:border-b-0"
+            >
+              <div className="w-14 px-2 py-3 text-center text-xs text-white/60 border-r border-white/10">
+                {row}
               </div>
 
-              {/* Cells */}
-              {rowCells.map((cell, idx) => (
-                <motion.div
-                  key={`${cell.row}-${cell.col}`}
-                  className={`flex-1 min-w-[60px] h-12 rounded flex items-center justify-center text-white font-semibold ${
-                    cell.isCurrent
-                      ? 'bg-red-500'
-                      : cell.chord
-                      ? 'bg-gray-800 border border-gray-700'
-                      : 'bg-gray-900 border border-gray-800'
-                  }`}
-                  animate={cell.isCurrent ? {
-                    scale: [1, 1.05, 1],
-                  } : {}}
-                  transition={{ duration: 0.3 }}
-                >
-                  {cell.chord && (
-                    <span className="text-lg">
-                      {simplifyChordName(cell.chord)}
-                    </span>
-                  )}
-                </motion.div>
-              ))}
+              <div className="flex flex-1 divide-x divide-white/10">
+                {rowCells.map((cell) => {
+                  const chordLabel = cell.chord ? simplifyChordName(cell.chord) : '';
+                  return (
+                    <motion.button
+                      type="button"
+                      key={`${cell.row}-${cell.col}`}
+                      onClick={() => onCellClick?.(cell.time)}
+                      className={`flex-1 min-w-[70px] px-2 py-3 text-left transition ${
+                        cell.isCurrent
+                          ? 'bg-emerald-500/15 border border-emerald-400 text-white shadow-inner shadow-emerald-500/40'
+                          : 'bg-slate-900/40 border border-transparent hover:bg-slate-800/60'
+                      }`}
+                      animate={
+                        cell.isCurrent
+                          ? {
+                              scale: [1, 1.01, 1],
+                              transition: { duration: 1, repeat: Infinity },
+                            }
+                          : undefined
+                      }
+                    >
+                      <div className="text-sm font-semibold text-white">
+                        {cell.chord ? chordLabel : '—'}
+                      </div>
+                      <div className="text-[11px] text-white/60">
+                        {cell.chord ? cell.chord : 'Empty'}
+                      </div>
+                      <div className="text-[10px] text-white/40 mt-1">
+                        {formatTimestamp(cell.time)}
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
@@ -197,4 +207,3 @@ export const ChordProgressionGrid: React.FC<ChordProgressionGridProps> = ({
     </div>
   );
 };
-

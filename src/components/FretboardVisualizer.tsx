@@ -1,10 +1,11 @@
 // Instrument visualizer for guitar, ukulele, piano, and trumpet
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { SVGuitarChord } from 'svguitar';
 import { Piano, MidiNumbers } from 'react-piano';
 import 'react-piano/dist/styles.css';
 import type { Instrument } from '@/types/transcription';
+import { getTrumpetFingeringLabel, getTrumpetValveStates } from '@/utils/trumpetFingerings';
 import {
   getChordFingering,
   getAllChordFingerings,
@@ -26,52 +27,22 @@ interface FretboardVisualizerProps {
 
 // Trumpet fingering chart component
 const TrumpetFingering: React.FC<{ note: string }> = ({ note }) => {
-  // Trumpet fingering map (standard Bb trumpet)
-  const TRUMPET_FINGERINGS: Record<string, string> = {
-    'F#3': '1-2-3',
-    'G3': '1-3',
-    'G#3': '2-3',
-    'A3': '1-2',
-    'A#3': '1',
-    'B3': '2',
-    'C4': '0',
-    'C#4': '1-2-3',
-    'D4': '1-3',
-    'D#4': '2-3',
-    'E4': '1-2',
-    'F4': '1',
-    'F#4': '2',
-    'G4': '0',
-    'G#4': '2-3',
-    'A4': '1-2',
-    'A#4': '1',
-    'B4': '2',
-    'C5': '0',
-    'C#5': '1-2',
-    'D5': '1',
-    'D#5': '2',
-    'E5': '1-2',
-    'F5': '1',
-    'F#5': '2',
-    'G5': '0',
-  };
-
-  // Try exact match first, then try without accidentals
-  const fingering = TRUMPET_FINGERINGS[note] || TRUMPET_FINGERINGS[note.replace(/[#b]/, '')] || '—';
+  const fingeringLabel = getTrumpetFingeringLabel(note);
+  const valveStates = getTrumpetValveStates(note);
 
   return (
-    <div className="flex flex-col items-center gap-3 p-4 bg-gray-800/50 rounded-lg border border-white/10">
-      <div className="text-xl font-bold text-white mb-1">{note}</div>
-      <div className="flex gap-3">
+    <div className="flex flex-col items-center gap-4 p-5 bg-slate-800/50 rounded-xl border-2 border-white/20">
+      <div className="text-2xl sm:text-3xl font-bold text-white mb-2">{note}</div>
+      <div className="flex gap-4">
         {[1, 2, 3].map((valve) => {
-          const isPressed = fingering !== '—' && fingering !== '0' && fingering.includes(valve.toString());
+          const isPressed = valveStates ? valveStates[valve - 1] : false;
           return (
-            <div key={valve} className="flex flex-col items-center gap-1">
-              <div className="text-xs text-gray-400">Valve {valve}</div>
+            <div key={valve} className="flex flex-col items-center gap-2">
+              <div className="text-sm sm:text-base text-gray-300 font-medium">Valve {valve}</div>
               <div
-                className={`w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold text-lg transition-all ${
+                className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full border-3 flex items-center justify-center font-bold text-xl sm:text-2xl transition-all ${
                   isPressed
-                    ? 'bg-teal border-teal-light text-white shadow-lg'
+                    ? 'bg-teal border-teal-light text-white shadow-lg shadow-teal/50'
                     : 'bg-gray-700 border-gray-600 text-gray-400'
                 }`}
               >
@@ -81,8 +52,8 @@ const TrumpetFingering: React.FC<{ note: string }> = ({ note }) => {
           );
         })}
       </div>
-      <div className="text-sm text-gray-300 mt-1">
-        {fingering === '0' ? 'Open' : fingering === '—' ? 'Unknown' : fingering}
+      <div className="text-base sm:text-lg text-white font-semibold mt-2">
+        {fingeringLabel ?? 'Unknown'}
       </div>
     </div>
   );
@@ -102,6 +73,8 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
   const [selectedFingeringIndex, setSelectedFingeringIndex] = useState(0);
   const [majorScalePosition, setMajorScalePosition] = useState(0); // Starting fret for major scale
   const [minorScalePosition, setMinorScalePosition] = useState(0); // Starting fret for minor scale
+  const [viewMode, setViewMode] = useState<'scales' | 'chords' | 'piano'>(chord ? 'chords' : 'scales');
+  const [scaleFlavor, setScaleFlavor] = useState<'major' | 'minor'>('major');
 
   const isGuitar = instrument === 'guitar' || instrument === 'bass';
   const isUkulele = instrument === 'ukulele';
@@ -383,20 +356,20 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full flex flex-col items-center gap-4 bg-gray-900 rounded-lg p-4"
+        className="w-full flex flex-col items-center gap-6 bg-gradient-to-b from-slate-900 to-slate-800 rounded-2xl p-5 sm:p-8"
       >
         {chord && (
-          <div className="text-center mb-2">
-            <span className="text-2xl font-semibold text-white">{chord}</span>
+          <div className="text-center mb-4">
+            <span className="text-3xl sm:text-4xl font-bold text-white">{chord}</span>
           </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 w-full">
           {notesToShow.slice(0, 6).map((note, idx) => (
             <TrumpetFingering key={`${note}-${idx}`} note={note} />
           ))}
         </div>
         {targetNotes.length > 6 && (
-          <div className="text-sm text-gray-400 mt-2">
+          <div className="text-base text-white/70 mt-3 font-medium">
             Showing first 6 of {targetNotes.length} notes
           </div>
         )}
@@ -437,6 +410,49 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
   const relativeMinorKey = detectedKey ? getRelativeMinor(detectedKey) : null;
   const relativeMinorScale = relativeMinorKey ? getMinorScale(relativeMinorKey) : [];
 
+  const chordRoot = useMemo(() => {
+    if (!chord) return null;
+    const match = chord.match(/^[A-G](#|b)?/);
+    return match ? match[0].replace('♭', 'b') : null;
+  }, [chord]);
+
+  const fallbackMajorKey = detectedKey || chordRoot || 'C';
+  const fallbackMajorScale = majorScale.length > 0 ? majorScale : getMajorScale(fallbackMajorKey);
+  const derivedMinorKey = relativeMinorKey || getRelativeMinor(fallbackMajorKey);
+  const fallbackMinorScale =
+    relativeMinorScale.length > 0 ? relativeMinorScale : getMinorScale(derivedMinorKey);
+
+  const activeScaleNotes = scaleFlavor === 'major' ? fallbackMajorScale : fallbackMinorScale;
+  const activeScaleLabel =
+    scaleFlavor === 'major'
+      ? `${fallbackMajorKey} Major`
+      : `${derivedMinorKey.replace('m', '')} Minor`;
+  const scaleHighlightColor = scaleFlavor === 'major' ? '#7dd3fc' : '#c084fc';
+  const scaleDegrees = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+  const scalePosition = scaleFlavor === 'major' ? majorScalePosition : minorScalePosition;
+  const setScalePosition = scaleFlavor === 'major' ? setMajorScalePosition : setMinorScalePosition;
+  const canShowScale = (isGuitar || isUkulele) && activeScaleNotes.length > 0;
+  const canShowChord = Boolean(chord && (isGuitar || isUkulele));
+  const canShowPianoOverlay = Boolean(chord);
+  const availableTabs = useMemo(
+    () =>
+      [
+        { id: 'scales' as const, label: 'Scales', enabled: canShowScale },
+        { id: 'chords' as const, label: 'Chords', enabled: canShowChord },
+        { id: 'piano' as const, label: 'Piano', enabled: canShowPianoOverlay },
+      ] as const,
+    [canShowScale, canShowChord, canShowPianoOverlay],
+  );
+
+  useEffect(() => {
+    if (!availableTabs.some((tab) => tab.id === viewMode && tab.enabled)) {
+      const fallbackTab = availableTabs.find((tab) => tab.enabled);
+      if (fallbackTab) {
+        setViewMode(fallbackTab.id);
+      }
+    }
+  }, [availableTabs, viewMode]);
+
   // Function to get note at a specific fret and string
   const getNoteAtFret = (stringIndex: number, fret: number, isUkulele: boolean): string => {
     const tuning = isUkulele ? ['G', 'C', 'E', 'A'] : ['E', 'A', 'D', 'G', 'B', 'E'];
@@ -463,97 +479,87 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
 
   // Render scale fretboard diagram with position navigation
   const renderScaleFretboard = (
-    scale: string[], 
-    scaleName: string, 
-    color: string, 
+    scale: string[],
+    scaleName: string,
+    colorHex: string,
     isUkulele: boolean,
     currentPosition: number,
-    onPositionChange: (newPosition: number) => void
+    onPositionChange: (newPosition: number) => void,
   ) => {
     const strings = isUkulele ? ['G', 'C', 'E', 'A'] : ['E', 'A', 'D', 'G', 'B', 'E'];
-    const fretsToShow = 5; // Show 5 frets at a time
-    const maxFret = 12; // Maximum fret to navigate to
-    
+    const fretsToShow = 5;
+    const maxFret = 12;
     const startFret = currentPosition;
     const endFret = Math.min(startFret + fretsToShow - 1, maxFret);
-    
     const canGoLeft = startFret > 0;
     const canGoRight = endFret < maxFret;
-    
+
+    const buttonClasses =
+      'px-3 py-1.5 text-xs font-semibold rounded-full border border-white/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed';
+
     return (
-      <div className="w-full bg-gray-800/30 rounded-lg p-2">
-        <div className="flex items-center justify-between mb-2">
-          <button
-            onClick={() => onPositionChange(Math.max(0, startFret - 1))}
-            disabled={!canGoLeft}
-            className={`px-2 py-1 rounded text-white font-semibold transition-all text-sm ${
-              canGoLeft
-                ? 'bg-teal/80 hover:bg-teal shadow-md'
-                : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            ←
-          </button>
-          <div className="text-xs font-semibold text-white text-center">
-            {scaleName}
-            <div className="text-[10px] text-gray-400 mt-0.5">
-              Frets {startFret === 0 ? 'Open' : startFret} - {endFret}
-            </div>
+      <div className="w-full rounded-2xl bg-[#030a19] border border-white/5 p-4 sm:p-6 shadow-[0_25px_60px_rgba(0,0,0,0.55)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-white/60">{scaleName}</p>
+            <p className="text-xs text-white/50 mt-1">
+              Frets {startFret === 0 ? 'Open' : startFret} – {endFret}
+            </p>
           </div>
-          <button
-            onClick={() => onPositionChange(Math.min(maxFret - fretsToShow + 1, startFret + 1))}
-            disabled={!canGoRight}
-            className={`px-2 py-1 rounded text-white font-semibold transition-all text-sm ${
-              canGoRight
-                ? 'bg-teal/80 hover:bg-teal shadow-md'
-                : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            →
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onPositionChange(Math.max(0, startFret - 1))}
+              disabled={!canGoLeft}
+              className={`${buttonClasses} bg-white/5 hover:bg-white/10 text-white`}
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => onPositionChange(Math.min(maxFret - fretsToShow + 1, startFret + 1))}
+              disabled={!canGoRight}
+              className={`${buttonClasses} bg-white/5 hover:bg-white/10 text-white`}
+            >
+              Next
+            </button>
+          </div>
         </div>
-        
-        <div className="inline-block min-w-full pt-4">
-          {/* Strings */}
+
+        <div className="space-y-3">
           {strings.map((openNote, stringIdx) => (
-            <div key={stringIdx} className="flex items-center mb-1 relative">
-              {/* String label */}
-              <div className="w-6 sm:w-8 text-[10px] sm:text-xs font-semibold text-gray-300 text-right pr-1">
-                {openNote}
-              </div>
-              
-              {/* Frets */}
-              <div className="flex-1 flex relative h-8">
+            <div key={openNote + stringIdx} className="flex items-center gap-3">
+              <span className="w-6 text-xs font-semibold text-white/60 text-right">{openNote}</span>
+              <div
+                className="flex-1 grid gap-2 relative"
+                style={{ gridTemplateColumns: `repeat(${fretsToShow}, minmax(34px, 1fr))` }}
+              >
                 {Array.from({ length: fretsToShow }, (_, i) => {
                   const fret = startFret + i;
                   const note = getNoteAtFret(stringIdx, fret, isUkulele);
                   const isInScale = note && isNoteInScale(note, scale);
                   const isRoot = note && isRootNote(note, scale);
-                  
+
                   return (
                     <div
-                      key={fret}
-                      className={`flex-1 flex items-center justify-center border-r border-gray-600 min-w-[24px] relative ${
-                        fret === 0 ? 'border-l-2 border-gray-500' : ''
-                      }`}
+                      key={`${stringIdx}-${fret}`}
+                      className="relative h-12 rounded-xl border border-white/5 bg-white/5 flex items-center justify-center"
                     >
-                      {/* Fret number on top of the line (only show on first string) */}
+                      <div className="absolute inset-y-0 left-0 w-px bg-white/10" />
                       {stringIdx === 0 && (
-                        <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-400 font-semibold whitespace-nowrap">
+                        <span className="absolute -top-4 text-[10px] font-semibold text-white/60">
                           {fret === 0 ? 'O' : fret}
-                        </div>
+                        </span>
                       )}
-                      
-                      {/* Note marker - show circle for all notes */}
                       {note && (
                         <div
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
-                            isRoot
-                              ? 'bg-red-500 ring-1 ring-white text-white shadow-md'
-                              : isInScale
-                              ? 'bg-green-500/60 text-white border border-green-400/50'
-                              : 'bg-gray-700/30 text-gray-500 border border-gray-600'
-                          }`}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold tracking-wide"
+                          style={{
+                            backgroundColor: isInScale ? colorHex : 'rgba(255,255,255,0.04)',
+                            color: isRoot ? '#0a0912' : isInScale ? '#05080f' : 'rgba(255,255,255,0.35)',
+                            boxShadow: isInScale
+                              ? `0 8px 18px ${colorHex}40`
+                              : 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+                            border: isRoot ? '2px solid rgba(255,255,255,0.9)' : 'none',
+                          }}
                         >
                           {note.replace('#', '♯')}
                         </div>
@@ -569,162 +575,220 @@ export const FretboardVisualizer: React.FC<FretboardVisualizerProps> = ({
     );
   };
 
+  const renderChordPanel = () => {
+    if (!chord) return null;
+
+    if (variant === 'grid' && (isGuitar || isUkulele)) {
+      return (
+        <div className="rounded-2xl bg-[#040b1a] border border-white/5 p-4 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
+          <ChordPositionsGrid
+            chordName={chord}
+            instrument={isUkulele ? 'ukulele' : 'guitar'}
+            maxPositions={6}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="rounded-2xl bg-gradient-to-br from-[#13233f] via-[#0a1425] to-[#05080f] border border-white/5 p-5 sm:p-6 shadow-[0_35px_80px_rgba(0,0,0,0.55)]">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.6em] text-white/60">Chord</p>
+              <p className="text-4xl font-bold text-white mt-1">{chord}</p>
+              <p className="text-sm text-white/50 mt-1">
+                {isUkulele ? 'Standard ukulele tuning' : 'Standard guitar tuning'}
+              </p>
+            </div>
+            {targetNotes.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {targetNotes.slice(0, 5).map((note, idx) => (
+                  <span
+                    key={`${note}-chip-${idx}`}
+                    className="px-3 py-1 rounded-full bg-white/10 text-sm font-semibold text-white/80"
+                  >
+                    {note}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {allChordFingerings.length > 1 && (
+            <div className="flex flex-wrap gap-2 mt-6">
+              {allChordFingerings.map((fingering, index) => {
+                const isSelected = index === selectedFingeringIndex;
+                const position = fingering.baseFret || 1;
+                const positionLabel = position > 1 ? `${position}fr` : 'Open';
+
+                return (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedFingeringIndex(index)}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${
+                      isSelected
+                        ? 'bg-white text-black border-white shadow-[0_15px_35px_rgba(255,255,255,0.35)]'
+                        : 'bg-white/5 text-white/70 border-white/10 hover:text-white'
+                    }`}
+                  >
+                    {index === 0 ? 'Primary shape' : `Shape ${index + 1}`}
+                    <span className="ml-2 text-xs text-white/50">{positionLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-[#050b17] border border-white/5 p-4 sm:p-6 relative flex items-center justify-center shadow-[0_30px_70px_rgba(0,0,0,0.55)]">
+          <div
+            ref={containerRef}
+            className="chord-diagram w-full"
+            style={{ minHeight: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          />
+          {!chordFingering && (
+            <div className="absolute inset-0 flex items-center justify-center text-white/60 text-sm p-4 text-center">
+              Diagram unavailable for {chord}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-[#040b1a] border border-white/5 p-4 sm:p-5">
+          <ChordPositionsGrid
+            chordName={chord}
+            instrument={isUkulele ? 'ukulele' : 'guitar'}
+            maxPositions={4}
+          />
+        </div>
+      </div>
+    );
+  };
+
   // Guitar/Ukulele (default)
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="w-full flex flex-col gap-4 bg-gray-900/50 rounded-lg p-4"
-    >
-      {/* Scale Display */}
-      {detectedKey && majorScale.length > 0 && (isGuitar || isUkulele) && (
-        <div className="space-y-3">
-          {/* Scale Note Badges */}
-          <div className="text-center">
-            <div className="text-lg font-semibold text-white mb-2">
-              Key: {detectedKey} Major
-            </div>
-            <div className="flex gap-2 flex-wrap justify-center mb-3">
-              {majorScale.map((note, idx) => (
-                <div
-                  key={`major-${note}-${idx}`}
-                  className="px-3 py-1 bg-teal/80 text-white rounded-full text-sm font-semibold"
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full">
+      <div className="rounded-[32px] bg-[#030714] border border-white/10 p-5 sm:p-8 shadow-[0_45px_120px_rgba(0,0,0,0.6)] flex flex-col gap-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.65em] text-white/60">Explorer</p>
+            <p className="text-3xl sm:text-4xl font-bold text-white mt-1">
+              {chord || detectedKey || 'Tone Path'}
+            </p>
+            <p className="text-sm text-white/50 mt-1">
+              Modern chord & scale visualizer inspired by fretastic.com
+            </p>
+          </div>
+          <div className="flex items-center gap-2 bg-white/5 rounded-full p-1 border border-white/10">
+            {availableTabs
+              .filter((tab) => tab.enabled)
+              .map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setViewMode(tab.id)}
+                  className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-all ${
+                    viewMode === tab.id ? 'bg-white text-black shadow-lg' : 'text-white/60'
+                  }`}
                 >
-                  {note}
+                  {tab.label}
+                </button>
+              ))}
+          </div>
+        </div>
+
+        {viewMode === 'scales' && canShowScale && (
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.45em] text-white/60">Active scale</p>
+                <p className="text-2xl sm:text-3xl font-semibold text-white mt-1">{activeScaleLabel}</p>
+              </div>
+              <div className="flex items-center bg-white/5 rounded-full p-1 border border-white/10">
+                {(['major', 'minor'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setScaleFlavor(mode)}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-all ${
+                      scaleFlavor === mode ? 'bg-white text-black shadow' : 'text-white/60'
+                    }`}
+                  >
+                    {mode === 'major' ? 'Major' : 'Minor'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              {activeScaleNotes.map((note, idx) => (
+                <div
+                  key={`${note}-${idx}`}
+                  className="flex flex-col items-center justify-center min-w-[72px] rounded-2xl bg-white/5 border border-white/10 px-3 py-2 text-white"
+                >
+                  <span className="text-[10px] uppercase tracking-[0.35em] text-white/50">
+                    {scaleDegrees[idx]}
+                  </span>
+                  <span className="text-2xl font-semibold mt-1">{note}</span>
                 </div>
               ))}
             </div>
-          </div>
-          
-          {/* Major Scale Fretboards - Multiple positions on larger screens */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {[0, 1, 2].map((offset) => {
-              const position = majorScalePosition + offset;
-              if (position > 12 - 5) return null; // Don't show if beyond max fret
-              
-              return (
-                <div key={`major-${position}`} className={offset > 0 ? 'hidden md:block' : ''}>
-                  {renderScaleFretboard(
-                    majorScale, 
-                    offset === 0 ? `${detectedKey} Major Scale` : `Position ${position + 1}`, 
-                    'bg-teal', 
-                    isUkulele,
-                    position,
-                    setMajorScalePosition
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          
-          {relativeMinorKey && relativeMinorScale.length > 0 && (
-            <>
-              {/* Relative Minor Note Badges */}
-              <div className="text-center mt-4">
-                <div className="text-lg font-semibold text-white mb-2">
-                  Relative Minor: {relativeMinorKey}
-                </div>
-                <div className="flex gap-2 flex-wrap justify-center mb-3">
-                  {relativeMinorScale.map((note, idx) => (
-                    <div
-                      key={`minor-${note}-${idx}`}
-                      className="px-3 py-1 bg-purple-600/80 text-white rounded-full text-sm font-semibold"
-                    >
-                      {note}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Relative Minor Scale Fretboards - Multiple positions on larger screens */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {[0, 1, 2].map((offset) => {
-                  const position = minorScalePosition + offset;
-                  if (position > 12 - 5) return null; // Don't show if beyond max fret
-                  
-                  return (
-                    <div key={`minor-${position}`} className={offset > 0 ? 'hidden md:block' : ''}>
-                      {renderScaleFretboard(
-                        relativeMinorScale, 
-                        offset === 0 ? `${relativeMinorKey} Minor Scale` : `Position ${position + 1}`, 
-                        'bg-purple-600', 
-                        isUkulele,
-                        position,
-                        setMinorScalePosition
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
-      {/* Chord Diagram */}
-      {chord && (
-        <>
-          {variant === 'grid' && (isGuitar || isUkulele) ? (
-            <ChordPositionsGrid
-              chordName={chord}
-              instrument={isUkulele ? 'ukulele' : 'guitar'}
-              maxPositions={9}
-            />
-          ) : (
-            <div className="w-full flex flex-col gap-3">
-              {/* Fingering Selector - Show if multiple fingerings available */}
-              {allChordFingerings.length > 1 && (
-                <div className="flex gap-2 flex-wrap justify-center">
-                  {allChordFingerings.map((fingering, index) => {
-                    const isSelected = index === selectedFingeringIndex;
-                    const position = fingering.baseFret || 1;
-                    const positionLabel = position > 1 ? `${position}fr` : 'Open';
-                    
-                    return (
-                      <button
-                        key={index}
-                        onClick={() => setSelectedFingeringIndex(index)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                          isSelected
-                            ? 'bg-teal text-white shadow-lg ring-2 ring-teal/50'
-                            : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700 hover:text-white'
-                        }`}
-                      >
-                        {index === 0 ? 'Most Popular' : `Position ${index + 1}`}
-                        <span className="ml-1 text-xs opacity-75">({positionLabel})</span>
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="space-y-4">
+              {renderScaleFretboard(
+                activeScaleNotes,
+                activeScaleLabel,
+                scaleHighlightColor,
+                isUkulele,
+                scalePosition,
+                setScalePosition,
               )}
-              
-              {/* Chord Diagram Container */}
-              <div className="w-full flex justify-center relative">
-                <div
-                  ref={containerRef}
-                  className="chord-diagram"
-                  style={{
-                    width: '100%',
-                    maxWidth: '100%',
-                    minHeight: '200px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+              <div>
+                <input
+                  type="range"
+                  min={0}
+                  max={8}
+                  value={scalePosition}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    const clamped = Math.max(0, Math.min(8, value));
+                    setScalePosition(clamped);
                   }}
+                  className="w-full h-1.5 rounded-full bg-white/10 accent-white"
                 />
-                {!chordFingering && (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/60 text-xs p-2">
-                    <div className="text-center">
-                      <div className="font-semibold">{chord}</div>
-                      <div className="text-[10px] mt-1">No diagram</div>
-                    </div>
-                  </div>
-                )}
+                <div className="flex justify-between text-[11px] text-white/60 mt-1">
+                  <span>Open</span>
+                  <span>12th fret</span>
+                </div>
               </div>
             </div>
-          )}
-        </>
-      )}
+          </div>
+        )}
+
+        {viewMode === 'chords' && canShowChord && renderChordPanel()}
+
+        {viewMode === 'piano' && canShowPianoOverlay && chord && (
+          <div className="rounded-3xl bg-[#061022] border border-white/10 p-4 sm:p-6">
+            <PianoChordDisplay chordName={chord} showControls showVoicings />
+          </div>
+        )}
+
+        {!canShowScale && viewMode === 'scales' && (
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-6 text-center text-white/60">
+            Provide a chord or detected key to unlock the scale view.
+          </div>
+        )}
+
+        {!canShowChord && viewMode === 'chords' && (
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-6 text-center text-white/60">
+            Select or detect a chord to explore fretboard shapes.
+          </div>
+        )}
+
+        {viewMode === 'piano' && !chord && (
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-6 text-center text-white/60">
+            Add a chord to preview the piano voicings.
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 };

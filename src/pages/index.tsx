@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Head from 'next/head';
 import { AudioVisualizer } from '@/components/AudioVisualizer';
 import { PianoRoll } from '@/components/PianoRoll';
 import { ChordProgressionGrid } from '@/components/ChordProgressionGrid';
 import { Tuner } from '@/components/Tuner';
-import { SimpleTuner } from '@/components/SimpleTuner';
 import { Metronome } from '@/components/Metronome';
-import { TraditionalMetronome } from '@/components/TraditionalMetronome';
 import { CircleOfFifths } from '@/components/CircleOfFifths';
 import { LiveNoteDisplay } from '@/components/LiveNoteDisplay';
 import { SongNoteDisplay } from '@/components/SongNoteDisplay';
@@ -17,6 +15,7 @@ import { exportMIDIFile } from '@/utils/convertToMIDI';
 import { exportMusicXMLFile } from '@/utils/convertToMusicXML';
 import { analyzeAudioBufferForChords } from '@/utils/audioAnalysis';
 import { detectBPM } from '@/utils/bpmDetection';
+import { getTrumpetFingeringLabel } from '@/utils/trumpetFingerings';
 import type { Instrument, AudioSettings, PlaybackState, NoteEvent, ChordEvent, TranscriptionData, TranscriptionEvent } from '@/types/transcription';
 import type { TranscriptionPreset } from '@/types/presets';
 import { PracticeShell } from '@/components/layout/PracticeShell';
@@ -30,6 +29,8 @@ import { FretboardVisualizer } from '@/components/FretboardVisualizer';
 import { FeedbackHUD } from '@/components/FeedbackHUD';
 import { ProgressChart } from '@/components/ProgressChart';
 import { ChordChart } from '@/components/ChordChart';
+import { ChordDictionary } from '@/components/ChordDictionary';
+import { ScaleChordView } from '@/components/ScaleChordView';
 import { usePlaybackVisualizer } from '@/hooks/usePlaybackVisualizer';
 import { useAudioStream } from '@/hooks/useAudioStream';
 import { usePitchDetection } from '@/hooks/usePitchDetection';
@@ -39,6 +40,8 @@ import { usePlayback } from '@/hooks/usePlayback';
 import { useChordRecognition } from '@/hooks/useChordRecognition';
 import { useLearningMode } from '@/hooks/useLearningMode';
 import { useAudioPlayback } from '@/hooks/useAudioPlayback';
+
+type CanvasView = 'play-along' | 'tools' | 'jam';
 
 export default function Home() {
   // Debug logging
@@ -74,7 +77,7 @@ export default function Home() {
   const [isImportSectionExpanded, setIsImportSectionExpanded] = useState(true);
   const [isToolsSectionExpanded, setIsToolsSectionExpanded] = useState(false);
   const [showToolsDropdown, setShowToolsDropdown] = useState(false);
-  const [selectedTool, setSelectedTool] = useState<'simple-tuner' | 'tuner' | 'traditional-metronome' | 'metronome' | 'circle-of-fifths' | null>(null);
+  const [selectedTool, setSelectedTool] = useState<'tuner' | 'metronome' | 'circle-of-fifths' | null>(null);
   const toolsDropdownRef = useRef<HTMLDivElement>(null);
   const hasAnalyzedRef = useRef(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -84,7 +87,17 @@ export default function Home() {
   const [practiceTarget, setPracticeTarget] = useState<PracticeTarget | null>(null);
   const [practiceProgress, setPracticeProgress] = useState<any[]>([]);
   const [loadedSongId, setLoadedSongId] = useState<string | null>(null);
-  const [canvasView, setCanvasView] = useState<'live' | 'timeline'>('live');
+  const [canvasView, setCanvasView] = useState<CanvasView>('play-along');
+  const [toolPanels, setToolPanels] = useState({
+    tuner: true,
+    metronome: true,
+    circle: true,
+    dictionary: true,
+  });
+
+  useEffect(() => {
+    setIsToolsSectionExpanded(canvasView === 'tools');
+  }, [canvasView]);
 
   // Close tools dropdown when clicking outside
   useEffect(() => {
@@ -262,6 +275,24 @@ export default function Home() {
 
   // Audio playback for imported audio (with loop/tempo control)
   const importedAudioPlayback = useAudioPlayback(importedAudioBuffer);
+  const playbackTapContext = importedAudioPlayback.audioContext;
+  const playbackTapNode = importedAudioPlayback.outputNode;
+
+  // Keep chord recognition pointed at the actual playback graph
+  useEffect(() => {
+    if (!importedAudioBuffer) {
+      setImportedAudioContext(null);
+      setImportedAudioSource(null);
+      return;
+    }
+
+    if (playbackTapContext) {
+      setImportedAudioContext(playbackTapContext);
+    }
+    if (playbackTapNode) {
+      setImportedAudioSource(playbackTapNode);
+    }
+  }, [importedAudioBuffer, playbackTapContext, playbackTapNode]);
 
   // Learning mode
   const { progress: learningProgress, currentMetrics, updateMetrics } = useLearningMode({
@@ -279,8 +310,22 @@ export default function Home() {
 
   // Update playback state
   useEffect(() => {
-    setPlaybackState((prev) => ({ ...prev, isPlaying, currentTime }));
-  }, [isPlaying, currentTime]);
+    if (recordedData) {
+      setPlaybackState((prev) => ({ ...prev, isPlaying, currentTime }));
+    } else {
+      setPlaybackState((prev) => ({
+        ...prev,
+        isPlaying: importedAudioPlayback.isPlaying,
+        currentTime: importedAudioPlayback.currentTime,
+      }));
+    }
+  }, [
+    recordedData,
+    isPlaying,
+    currentTime,
+    importedAudioPlayback.isPlaying,
+    importedAudioPlayback.currentTime,
+  ]);
 
   // Update detected notes and trigger chord detection
   useEffect(() => {
@@ -407,6 +452,20 @@ export default function Home() {
   };
 
   const handlePlay = () => {
+    if (!hasRecordedNotePlayback && importedAudioBuffer) {
+      if (importedAudioPlayback.isPlaying) {
+        importedAudioPlayback.pause();
+      } else {
+        importedAudioPlayback.play();
+      }
+      return;
+    }
+
+    if (!hasRecordedNotePlayback) {
+      console.warn('No playable note events available. Record a take or import audio with note data.');
+      return;
+    }
+
     if (isPlaying) {
       pause();
     } else {
@@ -414,8 +473,12 @@ export default function Home() {
     }
   };
 
-  const handlePause = () => {
-    pause();
+  const handleStopPlayback = () => {
+    if (!hasRecordedNotePlayback && importedAudioBuffer) {
+      importedAudioPlayback.stop();
+      return;
+    }
+    stop();
   };
 
   const handleExportMIDI = async () => {
@@ -471,13 +534,12 @@ export default function Home() {
     try {
       // Store the imported audio buffer for playback
       setImportedAudioBuffer(audioBuffer);
-      setImportedAudioContext(ctx);
       setImportError(null);
       setAnalyzedChords([]); // Clear previous analysis
       setImportedSongMetadata(metadata || null); // Store metadata
       setDetectedBPM(null); // Clear previous BPM
       setIsImportSectionExpanded(false); // Collapse import section after import
-      setCanvasView('timeline'); // Switch to timeline view after import
+      setCanvasView('play-along'); // Switch to Play Along view after import
       
       // Auto-detect BPM in the background
       setIsDetectingBPM(true);
@@ -493,14 +555,6 @@ export default function Home() {
         .finally(() => {
           setIsDetectingBPM(false);
         });
-      
-      // Create source node for chord recognition
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      const gainNode = ctx.createGain();
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      setImportedAudioSource(gainNode);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'Failed to process imported audio');
       setIsDetectingBPM(false);
@@ -573,6 +627,34 @@ export default function Home() {
     
     // Convert to full note names with octaves (default to octave 4)
     return noteNames.map(note => `${note}4`);
+  };
+
+  const noteNameToFrequency = (note: string): number => {
+    const match = note.match(/^([A-Ga-g])([#b]?)(\d+)?$/);
+    if (!match) {
+      return 0;
+    }
+    const [, letterRaw, accidental = '', octaveMatch] = match;
+    const letter = letterRaw.toUpperCase() as 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G';
+    const semitoneMap: Record<typeof letter, number> = {
+      C: 0,
+      D: 2,
+      E: 4,
+      F: 5,
+      G: 7,
+      A: 9,
+      B: 11,
+    };
+    let semitone = semitoneMap[letter];
+    if (accidental === '#') {
+      semitone += 1;
+    } else if (accidental === 'b') {
+      semitone -= 1;
+    }
+    const octave = typeof octaveMatch === 'string' ? parseInt(octaveMatch, 10) : 4;
+    const midiNumber = (octave + 1) * 12 + semitone;
+    const frequency = 440 * Math.pow(2, (midiNumber - 69) / 12);
+    return Number.isFinite(frequency) ? Number(frequency.toFixed(2)) : 0;
   };
 
   // Helper function to detect key from chord progression
@@ -652,6 +734,12 @@ export default function Home() {
 
       await saveSong(song);
       console.log(`✅ Saved imported song to library: ${songName}`, song);
+
+      // Load the analyzed song into the timeline so Play controls work immediately
+      setRecordedData(transcriptionData);
+      setDetectedChords(chordEvents);
+      setDetectedNotes([]);
+      setLoadedSongId(song.id);
       
       // Show success message
       alert(`Song saved to library: ${songName}\n${chordEvents.length} chords detected${detectedKeyValue ? `\nKey: ${detectedKeyValue}` : ''}${detectedBPM ? `\nBPM: ${detectedBPM}` : ''}`);
@@ -659,7 +747,7 @@ export default function Home() {
       console.error('Failed to save imported song:', error);
       alert('Failed to save song to library. Please try again.');
     }
-  }, [importedAudioBuffer, analyzedChords, importedSongMetadata, instrument, detectedBPM]);
+  }, [importedAudioBuffer, analyzedChords, importedSongMetadata, instrument, detectedBPM, setRecordedData, setDetectedChords, setDetectedNotes, setLoadedSongId]);
 
   const handleAnalyzeAudio = useCallback(async () => {
     if (!importedAudioBuffer) return;
@@ -749,6 +837,10 @@ export default function Home() {
   const recordedChordEvents = recordedData
     ? (recordedData.events.filter((e): e is ChordEvent => 'chord' in e) as ChordEvent[])
     : [];
+  const hasRecordedNotePlayback = recordedNoteEvents.length > 0;
+  const primaryIsPlaying = hasRecordedNotePlayback ? isPlaying : importedAudioPlayback.isPlaying;
+  const primaryCurrentTime = hasRecordedNotePlayback ? currentTime : importedAudioPlayback.currentTime;
+  const primaryDuration = hasRecordedNotePlayback ? duration : importedAudioPlayback.duration;
   
   // Convert analyzed chords (ChordFrame[]) to ChordEvent[] for display
   const analyzedChordEvents: ChordEvent[] = analyzedChords.map(frame => {
@@ -771,12 +863,84 @@ export default function Home() {
   }).filter(event => event.chord && event.chord.length > 0);
   
   // Priority: analyzed chords > recorded chords > detected chords
-  const displayChordEvents = analyzedChordEvents.length > 0 
-    ? analyzedChordEvents 
-    : recordedChordEvents.length > 0 
-    ? recordedChordEvents 
+  const displayChordEvents = analyzedChordEvents.length > 0
+    ? analyzedChordEvents
+    : recordedChordEvents.length > 0
+    ? recordedChordEvents
     : detectedChords;
-  
+
+  const chordGridRows = Math.max(4, Math.ceil(displayChordEvents.length / 4));
+
+  const derivedChordNoteEvents = useMemo<NoteEvent[]>(() => {
+    if (recordedNoteEvents.length > 0 || displayChordEvents.length === 0) {
+      return [];
+    }
+    const lastChordTimestamp = displayChordEvents[displayChordEvents.length - 1]?.timestamp ?? 0;
+    const chordTimelineEnd =
+      importedAudioBuffer?.duration ??
+      recordedData?.endTime ??
+      lastChordTimestamp + 2;
+
+    return displayChordEvents.flatMap((event, index) => {
+      const nextTimestamp = displayChordEvents[index + 1]?.timestamp ?? chordTimelineEnd;
+      const duration = Math.max(nextTimestamp - event.timestamp, 0.5);
+      const notes = event.notes.length > 0 ? event.notes : getChordNotes(event.chord);
+      return notes.map((note) => ({
+        timestamp: event.timestamp,
+        note,
+        frequency: noteNameToFrequency(note),
+        duration,
+        velocity: 0.85,
+        confidence: event.confidence,
+      }));
+    });
+  }, [displayChordEvents, importedAudioBuffer?.duration, recordedData?.endTime, recordedNoteEvents.length]);
+
+  const playAlongNoteEvents = recordedNoteEvents.length > 0 ? recordedNoteEvents : derivedChordNoteEvents;
+
+  const playAlongTranscriptionData = useMemo<TranscriptionData | null>(() => {
+    if (recordedData && recordedNoteEvents.length > 0) {
+      return recordedData;
+    }
+
+    if (playAlongNoteEvents.length === 0 && displayChordEvents.length === 0) {
+      return null;
+    }
+
+    const combinedEvents: TranscriptionEvent[] = [
+      ...playAlongNoteEvents,
+      ...displayChordEvents,
+    ].sort((a, b) => a.timestamp - b.timestamp);
+
+    const eventEndTimes = combinedEvents.map((event) =>
+      'note' in event ? event.timestamp + event.duration : event.timestamp + 1.5
+    );
+    const estimatedEnd =
+      eventEndTimes.length > 0
+        ? Math.max(...eventEndTimes, importedAudioBuffer?.duration || 0)
+        : importedAudioBuffer?.duration || 0;
+
+    return {
+      instrument,
+      events: combinedEvents,
+      startTime: 0,
+      endTime: estimatedEnd,
+    };
+  }, [recordedData, recordedNoteEvents.length, playAlongNoteEvents, displayChordEvents, instrument, importedAudioBuffer?.duration]);
+
+  // Filter to show only unique chords (first occurrence of each chord)
+  // Optimized for iOS performance using Set for O(n) complexity
+  const uniqueChordEvents = useMemo(() => {
+    const seen = new Set<string>();
+    return displayChordEvents.filter(event => {
+      if (seen.has(event.chord)) {
+        return false;
+      }
+      seen.add(event.chord);
+      return true;
+    });
+  }, [displayChordEvents]);
+
   console.log('Chord analysis state:', {
     analyzedChordsCount: analyzedChords.length,
     analyzedChordEventsCount: analyzedChordEvents.length,
@@ -786,36 +950,43 @@ export default function Home() {
     displayChordEvents: displayChordEvents.slice(0, 5),
   });
   
+  const playAlongCurrentTime = analyzedChordEvents.length > 0 ? importedAudioPlayback.currentTime : playbackState.currentTime;
+  const playAlongIsPlaying = analyzedChordEvents.length > 0 ? importedAudioPlayback.isPlaying : playbackState.isPlaying;
+
+  const playAlongActiveChordInfo = useMemo(() => {
+    if (!displayChordEvents.length) return null;
+    let index = displayChordEvents.findIndex((event, idx) => {
+      const nextTimestamp = displayChordEvents[idx + 1]?.timestamp ?? Number.POSITIVE_INFINITY;
+      return playAlongCurrentTime >= event.timestamp && playAlongCurrentTime < nextTimestamp;
+    });
+    if (index === -1) {
+      index = displayChordEvents.length - 1;
+    }
+    return {
+      event: displayChordEvents[index],
+      nextTimestamp: displayChordEvents[index + 1]?.timestamp ?? null,
+    };
+  }, [displayChordEvents, playAlongCurrentTime]);
+  
   const latestDetectedChord = detectedChords.length ? detectedChords[detectedChords.length - 1] : null;
   const latestRecordedChord = recordedChordEvents.length ? recordedChordEvents[recordedChordEvents.length - 1] : null;
   const latestAnalyzedChord = analyzedChordEvents.length ? analyzedChordEvents[analyzedChordEvents.length - 1] : null;
-  const latestChord = latestAnalyzedChord || latestRecordedChord || latestDetectedChord;
+  const fallbackChordEvent = latestAnalyzedChord || latestRecordedChord || latestDetectedChord || null;
+  const activeChordEvent = playAlongActiveChordInfo?.event || fallbackChordEvent || null;
+  const playAlongChordName = activeChordEvent?.chord || null;
+  const playAlongChordNotes = activeChordEvent
+    ? (activeChordEvent.notes.length > 0 ? activeChordEvent.notes : getChordNotes(activeChordEvent.chord))
+    : [];
   const recentNoteNames = detectedNotes.slice(-16).map((note) => note.note);
-  const sessionNoteCount = recordedNoteEvents.length || detectedNotes.length;
-  const sessionChordCount = displayChordEvents.length;
-
-  // Trumpet fingerings for note display
-  const TRUMPET_FINGERINGS: Record<string, string> = {
-    'C4': 'Open',
-    'C#4': '2',
-    'D4': '1',
-    'D#4': '1-2',
-    'E4': '2-3',
-    'F4': '1',
-    'F#4': '2',
-    'G4': 'Open',
-    'G#4': '2-3',
-    'A4': '1-2',
-    'A#4': '2',
-    'B4': '1',
-    'C5': 'Open',
-    'C#5': '2',
-    'D5': '1',
-    'D#5': '1-2',
-    'E5': '2-3',
-    'F5': '1',
-    'F#5': '2',
-    'G5': 'Open',
+  const sessionNoteCount = playAlongNoteEvents.length || detectedNotes.length;
+  const sessionChordCount = uniqueChordEvents.length;
+  const formatTimestamp = (seconds?: number | null) => {
+    if (typeof seconds !== 'number' || Number.isNaN(seconds)) {
+      return '--:--';
+    }
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
   const instrumentOptions: Instrument[] = ['trumpet', 'guitar', 'bass', 'ukulele', 'piano'];
@@ -823,18 +994,23 @@ export default function Home() {
   const statusIndicators = [
     { label: 'Listening', active: isListening },
     { label: 'Recording', active: isRecording },
-    { label: 'Playback', active: playbackState.isPlaying },
+    { label: 'Playback', active: hasRecordedNotePlayback ? playbackState.isPlaying : importedAudioPlayback.isPlaying },
     { label: 'Import', active: !!importedAudioBuffer },
     { label: 'Learning', active: learningModeEnabled },
   ];
 
   const viewTabs: Array<{ id: typeof canvasView; label: string; description: string }> = [
-    { id: 'timeline', label: 'Timeline', description: 'Recorded/imported material' },
-    { id: 'live', label: 'Live View', description: 'Microphone + instant feedback' },
+    { id: 'play-along', label: 'Play Along', description: 'Import a song and play along with it' },
+    { id: 'tools', label: 'Tools', description: 'Access tuner, metronome, and theory helpers' },
+    { id: 'jam', label: 'Jam', description: 'Use live tools to craft a song' },
   ];
 
+  const toggleToolPanel = (panel: keyof typeof toolPanels) => {
+    setToolPanels((prev) => ({ ...prev, [panel]: !prev[panel] }));
+  };
+
   const renderCanvasView = () => {
-    if (canvasView === 'timeline') {
+    if (canvasView === 'play-along') {
       return (
         <div className="space-y-4">
           <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6">
@@ -844,51 +1020,51 @@ export default function Home() {
                 <p className="text-xl font-semibold text-white">Song Note Display</p>
               </div>
               <span className="text-sm text-white/60">
-                {recordedNoteEvents.length > 0 ? `${recordedNoteEvents.length} notes` : 'No notes yet'}
+                {playAlongNoteEvents.length > 0 ? `${playAlongNoteEvents.length} notes` : 'No notes yet'}
               </span>
             </div>
-            {recordedData ? (
+            {playAlongTranscriptionData ? (
               <>
                 {/* Playback Controls for Recorded Data */}
-                {recordedData.events.length > 0 && (
+                {recordedData && recordedData.events.length > 0 && (
                   <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-slate-800/50 rounded-xl border border-white/10">
                     <div className="flex gap-2">
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={handlePlay}
-                        disabled={recordedData.events.length === 0}
+                        disabled={!hasRecordedNotePlayback && !importedAudioBuffer}
                         className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-sm whitespace-nowrap"
                       >
-                        {isPlaying ? '⏸ Pause' : '▶ Play'}
+                        {primaryIsPlaying ? '⏸ Pause' : '▶ Play'}
                       </motion.button>
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={stop}
-                        disabled={!isPlaying}
+                        onClick={handleStopPlayback}
+                        disabled={!primaryIsPlaying}
                         className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-sm whitespace-nowrap"
                       >
                         ⏹ Stop
                       </motion.button>
                     </div>
-                    {duration > 0 && (
+                    {primaryDuration > 0 && (
                       <div className="text-sm text-white/60">
-                        {Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')} / {Math.floor(duration / 60)}:{(Math.floor(duration % 60)).toString().padStart(2, '0')}
+                        {Math.floor(primaryCurrentTime / 60)}:{(Math.floor(primaryCurrentTime % 60)).toString().padStart(2, '0')} / {Math.floor(primaryDuration / 60)}:{(Math.floor(primaryDuration % 60)).toString().padStart(2, '0')}
                       </div>
                     )}
                   </div>
                 )}
                 <SongNoteDisplay
-                  songData={recordedData}
-                  currentTime={playbackState.currentTime}
-                  isPlaying={isPlaying}
+                  songData={playAlongTranscriptionData}
+                  currentTime={playAlongCurrentTime}
+                  isPlaying={playAlongIsPlaying}
                   instrument={instrument}
                 />
               </>
             ) : (
               <p className="text-sm text-white/60">
-                Record a take or load a song from the library to populate the timeline.
+                Record a take, analyze imported audio, or load a song from the library to populate the timeline.
               </p>
             )}
           </div>
@@ -899,13 +1075,13 @@ export default function Home() {
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-lg font-semibold text-white">Piano Roll</p>
                   <span className="text-sm text-white/60">
-                    {(instrument === 'piano' || recordedNoteEvents.length > 0) ? 'Detailed view' : 'Switch to piano to enable'}
+                    {(instrument === 'piano' || playAlongNoteEvents.length > 0) ? 'Detailed view' : 'Switch to piano to enable'}
                   </span>
                 </div>
-                {(instrument === 'piano' || recordedNoteEvents.length > 0) ? (
+                {(instrument === 'piano' || playAlongNoteEvents.length > 0) ? (
                   <PianoRoll
-                    notes={recordedNoteEvents.length > 0 ? recordedNoteEvents : detectedNotes}
-                    currentTime={playbackState.currentTime}
+                    notes={playAlongNoteEvents.length > 0 ? playAlongNoteEvents : detectedNotes}
+                    currentTime={playAlongCurrentTime}
                   />
                 ) : (
                   <p className="text-sm text-white/60">
@@ -928,11 +1104,38 @@ export default function Home() {
                 {displayChordEvents.length > 0 ? (
                   <ChordChart
                     chords={displayChordEvents}
-                    currentTime={analyzedChordEvents.length > 0 ? importedAudioPlayback.currentTime : playbackState.currentTime}
+                    currentTime={playAlongCurrentTime}
                   />
                 ) : (
                   <p className="text-sm text-white/60">
                     Start playing chords, load a session, or analyze imported audio to see harmonic analysis.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(instrument === 'guitar' || instrument === 'bass' || instrument === 'ukulele') && (
+              <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-lg font-semibold text-white">
+                    {instrument === 'ukulele' ? 'Ukulele' : instrument === 'bass' ? 'Bass' : 'Guitar'} Fretboard
+                  </p>
+                  <span className="text-sm text-white/60">
+                    {playAlongChordName || 'No chord yet'}
+                  </span>
+                </div>
+                {playAlongChordName ? (
+                  <FretboardVisualizer
+                    instrument={instrument}
+                    chord={playAlongChordName}
+                    targetNotes={playAlongChordNotes}
+                    showFretNumbers
+                    variant={instrument === 'guitar' || instrument === 'ukulele' ? 'grid' : 'full'}
+                    detectedKey={detectedKey}
+                  />
+                ) : (
+                  <p className="text-sm text-white/60">
+                    Play or import a song on your {instrument} to populate the fretboard.
                   </p>
                 )}
               </div>
@@ -954,11 +1157,15 @@ export default function Home() {
             {displayChordEvents.length > 0 ? (
               <ChordProgressionGrid
                 chords={displayChordEvents}
-                currentTime={analyzedChordEvents.length > 0 ? importedAudioPlayback.currentTime : playbackState.currentTime}
+                currentTime={playAlongCurrentTime}
                 bpm={detectedBPM || undefined}
                 beatsPerMeasure={4}
                 beatsPerCell={1}
-                rows={4}
+                rows={chordGridRows}
+                keySignature={detectedKey}
+                timeSignature="4/4"
+                instrumentLabel={instrument}
+                onCellClick={handleChordClick}
               />
             ) : analyzedChords.length > 0 ? (
               <div className="w-full bg-gray-900 rounded-lg p-4">
@@ -982,24 +1189,173 @@ export default function Home() {
       );
     }
 
+    if (canvasView === 'tools') {
+      return (
+        <div id="tools" className="space-y-4">
+          <div
+            id="tool-tuner"
+            className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6"
+          >
+            <button
+              type="button"
+              onClick={() => toggleToolPanel('tuner')}
+              className="w-full flex items-center justify-between text-left gap-3"
+            >
+              <div>
+                <p className="text-sm uppercase tracking-wide text-white/60">Pitch Center</p>
+                <p className="text-lg font-semibold text-white">Tuner</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-white/60">Live input</span>
+                <motion.span
+                  animate={{ rotate: toolPanels.tuner ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-white/60"
+                >
+                  ▼
+                </motion.span>
+              </div>
+            </button>
+            <AnimatePresence initial={false}>
+              {toolPanels.tuner && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mt-4"
+                >
+                  <Tuner currentNote={currentNote} instrument={instrument} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div
+            id="tool-metronome"
+            className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6"
+          >
+            <button
+              type="button"
+              onClick={() => toggleToolPanel('metronome')}
+              className="w-full flex items-center justify-between text-left gap-3"
+            >
+              <div>
+                <p className="text-sm uppercase tracking-wide text-white/60">Time Keeper</p>
+                <p className="text-lg font-semibold text-white">Metronome</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-white/60">30-300 BPM</span>
+                <motion.span
+                  animate={{ rotate: toolPanels.metronome ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-white/60"
+                >
+                  ▼
+                </motion.span>
+              </div>
+            </button>
+            <AnimatePresence initial={false}>
+              {toolPanels.metronome && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mt-4"
+                >
+                  <Metronome initialBpm={detectedBPM || playbackState.tempo} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div
+            id="tool-circle-of-fifths"
+            className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6"
+          >
+            <button
+              type="button"
+              onClick={() => toggleToolPanel('circle')}
+              className="w-full flex items-center justify-between text-left gap-3"
+            >
+              <div>
+                <p className="text-sm uppercase tracking-wide text-white/60">Theory Lab</p>
+                <p className="text-lg font-semibold text-white">Circle of Fifths</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {detectedKey && (
+                  <span className="text-xs text-white/60">Key: {detectedKey}</span>
+                )}
+                <motion.span
+                  animate={{ rotate: toolPanels.circle ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-white/60"
+                >
+                  ▼
+                </motion.span>
+              </div>
+            </button>
+            <AnimatePresence initial={false}>
+              {toolPanels.circle && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mt-4"
+                >
+                  <CircleOfFifths onKeySelect={(key) => setDetectedKey(key)} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div
+            id="tool-chord-dictionary"
+            className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6"
+          >
+            <button
+              type="button"
+              onClick={() => toggleToolPanel('dictionary')}
+              className="w-full flex items-center justify-between text-left gap-3"
+            >
+              <div>
+                <p className="text-sm uppercase tracking-wide text-white/60">Voicing Library</p>
+                <p className="text-lg font-semibold text-white">Chord Dictionary</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-white/60 capitalize">{instrument}</span>
+                <motion.span
+                  animate={{ rotate: toolPanels.dictionary ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-white/60"
+                >
+                  ▼
+                </motion.span>
+              </div>
+            </button>
+            <AnimatePresence initial={false}>
+              {toolPanels.dictionary && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mt-4"
+                >
+                  <ChordDictionary instrument={instrument === 'guitar' || instrument === 'ukulele' ? instrument : undefined} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      );
+    }
+
 
     return (
       <div className="space-y-4">
-        <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm uppercase tracking-wide text-white/60">Live Capture</p>
-              <p className="text-xl font-semibold text-white">Audio Visualizer</p>
-            </div>
-            <span className="text-xs text-emerald-300">{isListening ? 'Live' : isPlaying ? 'Playback' : 'Idle'}</span>
-          </div>
-          <AudioVisualizer
-            audioData={isPlaying ? playbackVisualizer.audioData : getAudioData()}
-            frequencyData={isPlaying ? playbackVisualizer.frequencyData : getFrequencyData()}
-            isActive={isListening || isPlaying}
-          />
-        </div>
-
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 sm:p-6">
             <div className="flex items-center justify-between mb-3">
@@ -1030,7 +1386,7 @@ export default function Home() {
               {displayChordEvents.length || recordedChordEvents.length ? (
                 <ChordChart
                   chords={displayChordEvents.length ? displayChordEvents : recordedChordEvents}
-                  currentTime={analyzedChordEvents.length > 0 ? importedAudioPlayback.currentTime : playbackState.currentTime}
+                  currentTime={playAlongCurrentTime}
                 />
               ) : (
                 <p className="text-sm text-white/60">
@@ -1141,43 +1497,22 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => {
-                      setSelectedTool('simple-tuner');
-                      setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
-                      setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
-                    }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
-                      selectedTool === 'simple-tuner' ? 'bg-white/10 text-white' : 'text-white/80'
-                    }`}
-                  >
-                    <span>🎯</span>
-                    <span>Simple Tuner</span>
-                  </button>
-                  <button
-                    onClick={() => {
                       setSelectedTool('tuner');
+                      setCanvasView('tools');
                       setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
                       setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
+                        document
+                          .getElementById('tool-tuner')
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }, 120);
                     }}
                     className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
                       selectedTool === 'tuner' ? 'bg-white/10 text-white' : 'text-white/80'
                     }`}
                   >
-                    <span>🎵</span>
-                    <span>Advanced Tuner</span>
+                    <span>🎯</span>
+                    <span>Tuner</span>
                   </button>
-                  
                   <div className="border-t border-white/10 my-2" />
                   
                   <div className="px-3 py-2 text-xs font-semibold text-white/60 uppercase tracking-wide">
@@ -1185,34 +1520,14 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => {
-                      setSelectedTool('traditional-metronome');
-                      setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
-                      setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
-                    }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
-                      selectedTool === 'traditional-metronome' ? 'bg-white/10 text-white' : 'text-white/80'
-                    }`}
-                  >
-                    <span>⏱️</span>
-                    <span>Traditional Metronome</span>
-                  </button>
-                  <button
-                    onClick={() => {
                       setSelectedTool('metronome');
+                      setCanvasView('tools');
                       setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
                       setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
+                        document
+                          .getElementById('tool-metronome')
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }, 120);
                     }}
                     className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
                       selectedTool === 'metronome' ? 'bg-white/10 text-white' : 'text-white/80'
@@ -1230,14 +1545,13 @@ export default function Home() {
                   <button
                     onClick={() => {
                       setSelectedTool('circle-of-fifths');
+                      setCanvasView('tools');
                       setShowToolsDropdown(false);
-                      setIsToolsSectionExpanded(true);
                       setTimeout(() => {
-                        const element = document.getElementById('tools');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }, 100);
+                        document
+                          .getElementById('tool-circle-of-fifths')
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }, 120);
                     }}
                     className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${
                       selectedTool === 'circle-of-fifths' ? 'bg-white/10 text-white' : 'text-white/80'
@@ -1253,23 +1567,30 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Instrument selector - larger touch targets for mobile */}
-      <div className="flex flex-wrap items-center gap-2">
-        {instrumentOptions.map((inst) => (
+      {/* Experience mode toggle */}
+      <div
+        className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3"
+        role="tablist"
+        aria-label="Practice mode"
+      >
+        {viewTabs.map((tab) => (
           <button
-            key={inst}
+            key={tab.id}
             type="button"
-            onClick={() => setInstrument(inst)}
-            className={`min-h-[44px] px-4 sm:px-5 py-2.5 rounded-full text-sm sm:text-base font-semibold capitalize border transition ${
-              instrument === inst
-                ? 'bg-white text-slate-900 border-white shadow-lg'
-                : 'border-white/20 text-white/70 hover:text-white hover:bg-white/10'
+            onClick={() => setCanvasView(tab.id)}
+            aria-pressed={canvasView === tab.id}
+            className={`min-h-[60px] flex flex-col items-start justify-center px-4 py-3 rounded-2xl border transition ${
+              canvasView === tab.id
+                ? 'border-white text-white bg-white/10 shadow-lg'
+                : 'border-white/10 text-white/70 hover:text-white hover:bg-white/5'
             }`}
           >
-            {inst}
+            <span className="text-sm sm:text-base font-semibold">{tab.label}</span>
+            <span className="text-xs sm:text-sm text-white/70 mt-0.5">{tab.description}</span>
           </button>
         ))}
       </div>
+
     </div>
   );
 
@@ -1284,263 +1605,269 @@ export default function Home() {
         </div>
       )}
 
-      {/* Import Section - Collapsible - Mobile-first */}
-      <div className="rounded-3xl border border-white/10 bg-slate-900/60 overflow-hidden">
-        <div 
-          className="flex items-center justify-between p-4 sm:p-6 cursor-pointer hover:bg-slate-800/50 transition-colors"
-          onClick={() => setIsImportSectionExpanded(!isImportSectionExpanded)}
-        >
-          <div className="flex items-center gap-3 flex-1">
-            <motion.div
-              animate={{ rotate: isImportSectionExpanded ? 90 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="text-white/60 text-sm"
-            >
-              ▶
-            </motion.div>
-            <div className="flex-1">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">📥 Import Audio</h2>
-              {!isImportSectionExpanded && importedAudioBuffer && (
-                <p className="text-xs sm:text-sm text-white/60 mt-1">
-                  {importedSongMetadata?.title || 'Song imported'} • Click to expand
-                </p>
-              )}
-              {isImportSectionExpanded && (
-                <p className="text-xs sm:text-sm text-white/60 mt-1">Import audio from YouTube, SoundCloud, or upload a file to practice along</p>
-              )}
+      {/* Import Section - hide on Tools view */}
+      {canvasView !== 'tools' && (
+        <div className="rounded-3xl border border-white/10 bg-slate-900/60 overflow-hidden">
+          <div
+            className="flex items-center justify-between p-4 sm:p-6 cursor-pointer hover:bg-slate-800/50 transition-colors"
+            onClick={() => setIsImportSectionExpanded(!isImportSectionExpanded)}
+          >
+            <div className="flex items-center gap-3 flex-1">
+              <motion.div
+                animate={{ rotate: isImportSectionExpanded ? 90 : 0 }}
+                transition={{ duration: 0.2 }}
+                className="text-white/60 text-sm"
+              >
+                ▶
+              </motion.div>
+              <div className="flex-1">
+                <h2 className="text-lg sm:text-xl font-semibold text-white">📥 Import Audio</h2>
+                {!isImportSectionExpanded && importedAudioBuffer && (
+                  <p className="text-xs sm:text-sm text-white/60 mt-1">
+                    {importedSongMetadata?.title || 'Song imported'} • Click to expand
+                  </p>
+                )}
+                {isImportSectionExpanded && (
+                  <p className="text-xs sm:text-sm text-white/60 mt-1">
+                    Import audio from YouTube, SoundCloud, or upload a file to practice along
+                  </p>
+                )}
+              </div>
             </div>
+            {importedAudioBuffer && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClearImportedAudio();
+                }}
+                className="px-4 py-2 rounded-full border border-red-400/40 text-red-200 text-sm hover:bg-red-500/20 transition-colors ml-2"
+              >
+                Clear Import
+              </button>
+            )}
           </div>
-          {importedAudioBuffer && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClearImportedAudio();
-              }}
-              className="px-4 py-2 rounded-full border border-red-400/40 text-red-200 text-sm hover:bg-red-500/20 transition-colors ml-2"
+
+          {isImportSectionExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
             >
-              Clear Import
-            </button>
+              <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
+                {!importedAudioBuffer && (
+                  <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="space-y-2">
+                      <YouTubeImport onImport={handleYouTubeImport} onError={setImportError} />
+                    </div>
+                    <div className="space-y-2">
+                      <SoundCloudImport onImport={handleYouTubeImport} onError={setImportError} />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                      <FileUpload onImport={handleFileImport} onError={setImportError} />
+                    </div>
+                  </div>
+                )}
+
+                {importError && (
+                  <div className="rounded-2xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-100 space-y-2">
+                    <p className="font-semibold">Import error</p>
+                    <p>{importError}</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Imported song summary lives inside the Import Audio container */}
+          {importedAudioBuffer && (
+            <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
+              <div className="rounded-3xl border border-emerald-400/40 bg-slate-900/60 p-4 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-semibold text-white mb-1">
+                      {importedSongMetadata?.title ? `🎵 ${importedSongMetadata.title}` : '🎵 Imported Song'}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-emerald-200/70">
+                      {importedSongMetadata?.artist && (
+                        <span className="font-semibold">{importedSongMetadata.artist}</span>
+                      )}
+                      {importedSongMetadata?.artist && ' • '}
+                      {isDetectingBPM && (
+                        <>
+                          <span className="text-yellow-400">Detecting BPM...</span> •
+                        </>
+                      )}
+                      {detectedBPM && !isDetectingBPM && (
+                        <>
+                          <span className="font-semibold text-gold">🎵 {detectedBPM} BPM</span> •
+                        </>
+                      )}
+                      Duration: {Math.floor(importedAudioBuffer.duration / 60)}:
+                      {Math.floor(importedAudioBuffer.duration % 60).toString().padStart(2, '0')} •
+                      Sample Rate: {importedAudioBuffer.sampleRate}Hz •
+                      Channels: {importedAudioBuffer.numberOfChannels}
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-2 relative">
+                    {isAnalyzing && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-gray-700 rounded-full h-2 overflow-hidden z-10">
+                        <motion.div
+                          className="bg-purple-600 h-2 rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${analysisProgress * 100}%` }}
+                          transition={{ duration: 0.2 }}
+                        />
+                      </div>
+                    )}
+                    {isAnalyzing && (
+                      <span className="text-sm text-white/60 px-2 py-2 order-1 sm:order-none">
+                        ⏳ Analyzing chords... {Math.round(analysisProgress * 100)}%
+                      </span>
+                    )}
+                    <div className="flex gap-2 order-2 sm:order-none">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() =>
+                          importedAudioPlayback.isPlaying
+                            ? importedAudioPlayback.pause()
+                            : importedAudioPlayback.play()
+                        }
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm whitespace-nowrap"
+                      >
+                        {importedAudioPlayback.isPlaying ? '⏸ Pause' : '▶ Play'}
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => importedAudioPlayback.stop()}
+                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold text-sm whitespace-nowrap"
+                      >
+                        ⏹ Stop
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+                  <LoopController
+                    loopStart={importedAudioPlayback.loopStart}
+                    loopEnd={importedAudioPlayback.loopEnd}
+                    isLooping={importedAudioPlayback.isLooping}
+                    duration={importedAudioPlayback.duration}
+                    tempo={importedAudioPlayback.tempo}
+                    audioBuffer={importedAudioBuffer}
+                    currentTime={importedAudioPlayback.currentTime}
+                    detectedBPM={detectedBPM}
+                    onLoopStartChange={importedAudioPlayback.setLoopStart}
+                    onLoopEndChange={importedAudioPlayback.setLoopEnd}
+                    onToggleLoop={importedAudioPlayback.toggleLoop}
+                    onTempoChange={importedAudioPlayback.setTempo}
+                    onSeek={importedAudioPlayback.seek}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
-        
-        {isImportSectionExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
-              {!importedAudioBuffer && (
-                <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="space-y-2">
-                    <YouTubeImport onImport={handleYouTubeImport} onError={setImportError} />
-                  </div>
-                  <div className="space-y-2">
-                    <SoundCloudImport onImport={handleYouTubeImport} onError={setImportError} />
-                  </div>
-                  <div className="space-y-2 sm:col-span-2 lg:col-span-1">
-                    <FileUpload onImport={handleFileImport} onError={setImportError} />
-                  </div>
-                </div>
-              )}
-              
-              {importError && (
-                <div className="rounded-2xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-100 space-y-2">
-                  <p className="font-semibold">Import error</p>
-                  <p>{importError}</p>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </div>
+      )}
 
-      {/* Practice Tools Section - Collapsible */}
-      <div id="tools" className="rounded-3xl border border-white/10 bg-slate-900/60 overflow-hidden">
-        <div 
-          className="flex items-center justify-between p-4 sm:p-6 cursor-pointer hover:bg-slate-800/50 transition-colors"
-          onClick={() => setIsToolsSectionExpanded(!isToolsSectionExpanded)}
-        >
-          <div className="flex items-center gap-3 flex-1">
-            <motion.div
-              animate={{ rotate: isToolsSectionExpanded ? 90 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="text-white/60 text-sm"
-            >
-              ▶
-            </motion.div>
-            <div className="flex-1">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">🎵 Practice Tools</h2>
-              {!isToolsSectionExpanded && (
-                <p className="text-xs sm:text-sm text-white/60 mt-1">
-                  Tuner and Metronome • Click to expand
-                </p>
-              )}
-              {isToolsSectionExpanded && (
-                <p className="text-xs sm:text-sm text-white/60 mt-1">Essential tools for practice sessions</p>
-              )}
+      {/* Instrument & Chord Overview */}
+      <div className="rounded-3xl border border-white/10 bg-slate-900/60">
+        <div className="p-4 sm:p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">🎸 Instrument Focus</h2>
+              <p className="text-xs sm:text-sm text-white/60 mt-1">
+                Choose your instrument to tailor feedback and review the chords detected in this session.
+              </p>
+            </div>
+            <div className="text-xs text-white/60">
+              {sessionChordCount > 0 ? `${sessionChordCount} chords detected` : 'No chords detected yet'}
             </div>
           </div>
-        </div>
-        
-        {isToolsSectionExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-6">
-              {/* Show selected tool or all tools if none selected */}
-              {(!selectedTool || selectedTool === 'simple-tuner') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Simple Tuner</h3>
-                  <SimpleTuner currentNote={currentNote} />
-                </div>
-              )}
 
-              {(!selectedTool || selectedTool === 'tuner') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Advanced Tuner</h3>
-                  <Tuner currentNote={currentNote} />
-                </div>
-              )}
+          <div className="flex flex-wrap items-center gap-2">
+            {instrumentOptions.map((inst) => (
+              <button
+                key={inst}
+                type="button"
+                onClick={() => setInstrument(inst)}
+                className={`min-h-[44px] px-4 sm:px-5 py-2.5 rounded-full text-sm sm:text-base font-semibold capitalize border transition ${
+                  instrument === inst
+                    ? 'bg-white text-slate-900 border-white shadow-lg'
+                    : 'border-white/20 text-white/70 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                {inst}
+              </button>
+            ))}
+          </div>
 
-              {(!selectedTool || selectedTool === 'traditional-metronome') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Traditional Metronome</h3>
-                  <TraditionalMetronome 
-                    initialBpm={detectedBPM || 120}
-                    onBpmChange={(bpm) => {
-                      // Sync with playback tempo if needed
-                      setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
-                    }}
-                  />
-                </div>
-              )}
-
-              {(!selectedTool || selectedTool === 'metronome') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Digital Metronome</h3>
-                  <Metronome 
-                    initialBpm={detectedBPM || 120}
-                    onBpmChange={(bpm) => {
-                      // Sync with playback tempo if needed
-                      setPlaybackState((prev) => ({ ...prev, tempo: bpm }));
-                    }}
-                  />
-                </div>
-              )}
-
-              {(!selectedTool || selectedTool === 'circle-of-fifths') && (
-                <div className="rounded-2xl border border-white/10 bg-slate-800/50 p-4 sm:p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Circle of Fifths</h3>
-                  <CircleOfFifths 
-                    onKeySelect={(key) => {
-                      console.log('Selected key:', key);
-                      // Could integrate with chord detection or playback
-                    }}
-                  />
-                </div>
-              )}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm uppercase tracking-wide text-white/60">Detected Chords</p>
+              {playAlongActiveChordInfo?.event ? (
+                <span className="text-xs text-emerald-300/80">
+                  Now: {playAlongActiveChordInfo.event.chord} @ {formatTimestamp(playAlongActiveChordInfo.event.timestamp)}
+                </span>
+              ) : fallbackChordEvent ? (
+                <span className="text-xs text-emerald-300/80">
+                  Last: {fallbackChordEvent.chord} @ {formatTimestamp(fallbackChordEvent.timestamp)}
+                </span>
+              ) : null}
             </div>
-          </motion.div>
-        )}
+            {uniqueChordEvents.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {uniqueChordEvents.slice(0, 12).map((event, index) => {
+                  const isActive =
+                    !!playAlongActiveChordInfo?.event &&
+                    playAlongActiveChordInfo.event.chord === event.chord;
+                  return (
+                    <button
+                      key={`${event.timestamp}-${event.chord}-${index}`}
+                      type="button"
+                      onClick={() => handleChordClick(event.timestamp)}
+                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                        isActive
+                          ? 'border-emerald-400/80 bg-emerald-500/10 shadow-lg shadow-emerald-500/20'
+                          : 'border-white/10 bg-slate-800/50 hover:border-white/30 hover:bg-slate-800/80'
+                      }`}
+                      aria-pressed={isActive}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-lg font-semibold text-white">{event.chord}</p>
+                        <span className="text-xs text-white/50">{formatTimestamp(event.timestamp)}</span>
+                      </div>
+                      <p className="text-xs text-emerald-200/80">
+                        {(event.confidence * 100).toFixed(0)}% confidence
+                      </p>
+                      {event.notes.length > 0 && (
+                        <p className="text-xs text-white/60 mt-1">Notes: {event.notes.join(', ')}</p>
+                      )}
+                      {isActive && (
+                        <span className="mt-2 inline-flex items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-200">
+                          Playing now
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-white/60">
+                {importedAudioBuffer ? 'Analyzing chords from the imported audio…' : 'Import or record audio to see detected chords.'}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
-
       {/* Visual Display of Imported Song */}
       {importedAudioBuffer && (
         <div className="rounded-3xl border border-emerald-400/40 bg-slate-900/60 p-4 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg sm:text-xl font-semibold text-white mb-1">
-                {importedSongMetadata?.title ? `🎵 ${importedSongMetadata.title}` : '🎵 Imported Song'}
-              </h3>
-              <p className="text-xs sm:text-sm text-emerald-200/70">
-                {importedSongMetadata?.artist && (
-                  <span className="font-semibold">{importedSongMetadata.artist}</span>
-                )}
-                {importedSongMetadata?.artist && ' • '}
-                {isDetectingBPM && (
-                  <>
-                    <span className="text-yellow-400">Detecting BPM...</span> • 
-                  </>
-                )}
-                {detectedBPM && !isDetectingBPM && (
-                  <>
-                    <span className="font-semibold text-gold">🎵 {detectedBPM} BPM</span> • 
-                  </>
-                )}
-                Duration: {Math.floor(importedAudioBuffer.duration / 60)}:
-                {Math.floor(importedAudioBuffer.duration % 60).toString().padStart(2, '0')} • 
-                Sample Rate: {importedAudioBuffer.sampleRate}Hz • 
-                Channels: {importedAudioBuffer.numberOfChannels}
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-2 relative">
-              {isAnalyzing && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-gray-700 rounded-full h-2 overflow-hidden z-10">
-                  <motion.div
-                    className="bg-purple-600 h-2 rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${analysisProgress * 100}%` }}
-                    transition={{ duration: 0.2 }}
-                  />
-                </div>
-              )}
-              {isAnalyzing && (
-                <span className="text-sm text-white/60 px-2 py-2 order-1 sm:order-none">
-                  ⏳ Analyzing chords... {Math.round(analysisProgress * 100)}%
-                </span>
-              )}
-              <div className="flex gap-2 order-2 sm:order-none">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() =>
-                    importedAudioPlayback.isPlaying
-                      ? importedAudioPlayback.pause()
-                      : importedAudioPlayback.play()
-                  }
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm whitespace-nowrap"
-                >
-                  {importedAudioPlayback.isPlaying ? '⏸ Pause' : '▶ Play'}
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => importedAudioPlayback.stop()}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold text-sm whitespace-nowrap"
-                >
-                  ⏹ Stop
-                </motion.button>
-              </div>
-            </div>
-          </div>
-
-          {/* Loop Controller with Waveform */}
-          <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-            <LoopController
-              loopStart={importedAudioPlayback.loopStart}
-              loopEnd={importedAudioPlayback.loopEnd}
-              isLooping={importedAudioPlayback.isLooping}
-              duration={importedAudioPlayback.duration}
-              tempo={importedAudioPlayback.tempo}
-              audioBuffer={importedAudioBuffer}
-              currentTime={importedAudioPlayback.currentTime}
-              detectedBPM={detectedBPM}
-              onLoopStartChange={importedAudioPlayback.setLoopStart}
-              onLoopEndChange={importedAudioPlayback.setLoopEnd}
-              onToggleLoop={importedAudioPlayback.toggleLoop}
-              onTempoChange={importedAudioPlayback.setTempo}
-              onSeek={importedAudioPlayback.seek}
-            />
-          </div>
-
           {/* Instrument-Specific Display: Chords for Guitar, Notes for Trumpet */}
           {importedAudioBuffer && (analyzedChords.length > 0 || importedChords.frames.length > 0) && (
             <div className="rounded-3xl border border-emerald-400/40 bg-slate-900/60 p-4 sm:p-6">
@@ -1644,7 +1971,7 @@ export default function Home() {
                             {Math.abs(currentChordFrame.time - currentTime) < 0.5 ? '🎵 Playing Now' : `At ${currentChordFrame.time.toFixed(1)}s`}
                           </div>
                         </div>
-                        <div className="text-xs text-white/40">
+                        <div className="text-xs text-white/60">
                           {(currentChordFrame.confidence * 100).toFixed(0)}% confidence
                         </div>
                       </motion.div>
@@ -1703,7 +2030,7 @@ export default function Home() {
                             {isPlaying ? '🎵 Playing Now' : `At ${currentChordFrame.time.toFixed(1)}s`}
                           </div>
                         </div>
-                        <div className="text-xs text-white/40">
+                        <div className="text-xs text-white/60">
                           {(currentChordFrame.confidence * 100).toFixed(0)}% confidence
                         </div>
                       </motion.div>
@@ -1725,7 +2052,7 @@ export default function Home() {
                             {rootNote}
                           </div>
                           <div className="text-lg text-white/90 font-semibold">
-                            {TRUMPET_FINGERINGS[rootNote] || '—'}
+                            {getTrumpetFingeringLabel(rootNote) || '—'}
                           </div>
                         </motion.div>
                       </div>
@@ -1754,7 +2081,7 @@ export default function Home() {
                             {Math.abs(currentChordFrame.time - currentTime) < 0.5 ? '🎵 Playing Now' : `At ${currentChordFrame.time.toFixed(1)}s`}
                           </div>
                         </div>
-                        <div className="text-xs text-white/40">
+                        <div className="text-xs text-white/60">
                           {(currentChordFrame.confidence * 100).toFixed(0)}% confidence
                         </div>
                       </motion.div>
@@ -2078,7 +2405,7 @@ export default function Home() {
                                 {rootNote}
                               </div>
                               <div className="text-sm text-white/90 font-semibold">
-                                {TRUMPET_FINGERINGS[rootNote] || '—'}
+                                {getTrumpetFingeringLabel(rootNote) || '—'}
                               </div>
                               <div className="text-xs text-white/70 mt-2">
                                 {chord.time.toFixed(1)}s
@@ -2319,7 +2646,7 @@ export default function Home() {
                                   </div>
                                   {instrument === 'trumpet' && (
                                     <div className="text-xs text-white/80">
-                                      {TRUMPET_FINGERINGS[note] || '—'}
+                                      {getTrumpetFingeringLabel(note) || '—'}
                                     </div>
                                   )}
                                 </div>
@@ -2339,28 +2666,17 @@ export default function Home() {
         </div>
       )}
 
-      {/* View Tabs - Mobile-friendly with larger touch targets */}
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
-        {viewTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setCanvasView(tab.id)}
-            className={`min-h-[60px] sm:min-h-[auto] flex flex-col items-center sm:items-start justify-center px-3 sm:px-4 py-3 sm:py-3 rounded-xl sm:rounded-2xl border transition ${
-              canvasView === tab.id
-                ? 'border-white text-white bg-white/10 shadow-lg'
-                : 'border-white/10 text-white/60 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <span className="text-sm sm:text-base font-semibold">{tab.label}</span>
-            <span className="text-xs hidden sm:block mt-0.5">{tab.description}</span>
-          </button>
-        ))}
-      </div>
-
       <div className="rounded-[32px] border border-white/10 bg-slate-900/40 p-3 sm:p-4">
         {renderCanvasView()}
       </div>
+
+      <ScaleChordView
+        instrument={instrument}
+        detectedKey={detectedKey}
+        currentChord={currentChord}
+        tempo={playbackState.tempo}
+      />
+
     </div>
   );
 

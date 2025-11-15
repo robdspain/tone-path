@@ -10,15 +10,6 @@ interface MetronomeProps {
   onBpmChange?: (bpm: number) => void;
 }
 
-const SOUND_PRESETS: Record<MetronomeSound, { accentFreq: number; beatFreq: number; type: OscillatorType; attack?: number; decay?: number }> = {
-  classic: { accentFreq: 1000, beatFreq: 800, type: 'sine' },
-  wood: { accentFreq: 600, beatFreq: 500, type: 'sine' },
-  electronic: { accentFreq: 1200, beatFreq: 900, type: 'square' },
-  tick: { accentFreq: 800, beatFreq: 600, type: 'sine' },
-  beep: { accentFreq: 1500, beatFreq: 1200, type: 'sine' },
-  click: { accentFreq: 2000, beatFreq: 1500, type: 'sine' },
-};
-
 export const Metronome: React.FC<MetronomeProps> = ({
   initialBpm = 120,
   onBpmChange,
@@ -34,6 +25,88 @@ export const Metronome: React.FC<MetronomeProps> = ({
   const beatRef = useRef(0);
   const soundTypeRef = useRef(soundType);
   const volumeRef = useRef(volume);
+  const transportOwnedRef = useRef(false);
+
+  const triggerMetronomeSound = (sound: MetronomeSound, isAccent: boolean, time: number) => {
+    const gain = new Tone.Gain(Math.max(0, Math.min(1, volumeRef.current * (isAccent ? 1 : 0.8)))).toDestination();
+
+    const disposeLater = (instrument: any) => {
+      setTimeout(() => {
+        instrument.dispose();
+        gain.dispose();
+      }, 300);
+    };
+
+    switch (sound) {
+      case 'classic': {
+        const synth = new Tone.MembraneSynth({
+          pitchDecay: 0.005,
+          octaves: 6,
+          envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.04 },
+        });
+        synth.connect(gain);
+        synth.triggerAttackRelease(isAccent ? 'C5' : 'G4', '16n', time);
+        disposeLater(synth);
+        break;
+      }
+      case 'wood': {
+        const synth = new Tone.PluckSynth({
+          resonance: 0.95,
+          dampening: 2600,
+        });
+        synth.connect(gain);
+        synth.triggerAttackRelease(isAccent ? 'C4' : 'A3', '8n', time);
+        disposeLater(synth);
+        break;
+      }
+      case 'electronic': {
+        const synth = new Tone.FMSynth({
+          harmonicity: 3,
+          modulationIndex: 10,
+          oscillator: { type: 'sine' },
+          envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.02 },
+          modulation: { type: 'square' },
+          modulationEnvelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
+        });
+        synth.connect(gain);
+        synth.triggerAttackRelease(isAccent ? 'E6' : 'C6', '16n', time);
+        disposeLater(synth);
+        break;
+      }
+      case 'tick': {
+        const synth = new Tone.NoiseSynth({
+          noise: { type: 'white' },
+          envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
+        });
+        synth.connect(gain);
+        synth.triggerAttackRelease('32n', time, isAccent ? 1 : 0.7);
+        disposeLater(synth);
+        break;
+      }
+      case 'beep': {
+        const synth = new Tone.Synth({
+          oscillator: { type: isAccent ? 'triangle' : 'sine' },
+          envelope: { attack: 0.001, decay: 0.05, sustain: 0.1, release: 0.02 },
+        });
+        synth.connect(gain);
+        synth.triggerAttackRelease(isAccent ? 'A5' : 'F5', '16n', time, 0.9);
+        disposeLater(synth);
+        break;
+      }
+      case 'click': {
+        const synth = new Tone.MetalSynth({
+          resonance: 400,
+          modulationIndex: 10,
+          envelope: { attack: 0.001, decay: 0.08, release: 0.02 },
+          harmonicity: 5.1,
+        });
+        synth.connect(gain);
+        synth.triggerAttackRelease('16n', time, 0.8);
+        disposeLater(synth);
+        break;
+      }
+    }
+  };
 
   // Update refs when state changes
   useEffect(() => {
@@ -45,81 +118,69 @@ export const Metronome: React.FC<MetronomeProps> = ({
   }, [volume]);
 
   useEffect(() => {
-    Tone.Transport.bpm.value = bpm;
+    if (isPlaying) {
+      Tone.Transport.bpm.value = bpm;
+    }
     onBpmChange?.(bpm);
-  }, [bpm, onBpmChange]);
+  }, [bpm, onBpmChange, isPlaying]);
 
   useEffect(() => {
-    if (!isPlaying) {
-      Tone.Transport.stop();
-      Tone.Transport.cancel();
+    return () => {
       if (loopRef.current) {
+        loopRef.current.stop();
         loopRef.current.dispose();
         loopRef.current = null;
+      }
+      if (transportOwnedRef.current) {
+        Tone.Transport.stop();
+        transportOwnedRef.current = false;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const disposeLoop = () => {
+      if (loopRef.current) {
+        loopRef.current.stop();
+        loopRef.current.dispose();
+        loopRef.current = null;
+      }
+    };
+
+    if (!isPlaying) {
+      disposeLoop();
+      if (transportOwnedRef.current) {
+        Tone.Transport.stop();
+        transportOwnedRef.current = false;
       }
       beatRef.current = 0;
       setBeat(0);
       return;
     }
 
-    // Start metronome
-    Tone.Transport.start();
+    disposeLoop();
 
-    // Create loop for metronome clicks
-    loopRef.current = new Tone.Loop((time) => {
-      const preset = SOUND_PRESETS[soundTypeRef.current];
+    const loop = new Tone.Loop((time) => {
       const currentBeat = beatRef.current;
-      
-      // Determine frequency based on beat
-      const frequency = currentBeat === 0 ? preset.accentFreq : preset.beatFreq;
-      
-      // Create a new oscillator for each click (more reliable)
-      const osc = new Tone.Oscillator({
-        frequency,
-        type: preset.type,
-      });
-      
-      // Create gain node for volume control
-      const gain = new Tone.Gain(0);
-      
-      // Create envelope to control gain (for click sound shaping)
-      const envelope = new Tone.Envelope({
-        attack: 0.001,
-        decay: 0.1,
-        sustain: 0,
-        release: 0.05,
-      }).connect(gain.gain);
-      
-      // Connect: osc -> gain -> destination
-      osc.connect(gain);
-      gain.toDestination();
-      
-      // Start oscillator
-      osc.start(time);
-      
-      // Trigger envelope to create click sound
-      envelope.triggerAttackRelease(volumeRef.current, 0.05, time);
-      
-      // Stop oscillator after envelope completes
-      osc.stop(time + 0.15);
-      
-      // Clean up after sound completes
-      setTimeout(() => {
-        osc.dispose();
-        envelope.dispose();
-        gain.dispose();
-      }, 200);
-      
-      // Update beat counter
+      triggerMetronomeSound(soundTypeRef.current, currentBeat === 0, time);
+
       beatRef.current = (beatRef.current + 1) % beatsPerMeasure;
       setBeat(beatRef.current);
-    }, '4n').start(0);
+    }, '4n');
+
+    loopRef.current = loop;
+    loop.start(0);
+
+    if (Tone.Transport.state !== 'started') {
+      transportOwnedRef.current = true;
+      Tone.Transport.position = 0;
+      Tone.Transport.start('+0.02');
+    } else {
+      transportOwnedRef.current = false;
+    }
 
     return () => {
-      if (loopRef.current) {
-        loopRef.current.dispose();
-        loopRef.current = null;
-      }
+      disposeLoop();
     };
   }, [isPlaying, beatsPerMeasure]);
 
@@ -134,6 +195,8 @@ export const Metronome: React.FC<MetronomeProps> = ({
   const handleBpmChange = (newBpm: number) => {
     setBpm(Math.max(30, Math.min(300, newBpm)));
   };
+  const tempoPercent = (bpm - 30) / (300 - 30);
+  const volumePercent = volume;
 
   return (
     <motion.div
@@ -168,17 +231,52 @@ export const Metronome: React.FC<MetronomeProps> = ({
               {bpm}
             </motion.span>
           </div>
-          <input
-            type="range"
-            min="30"
-            max="300"
-            value={bpm}
-            onChange={(e) => handleBpmChange(Number(e.target.value))}
-            className="w-full h-2"
-          />
+          <div className="relative h-10">
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/10" />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-sky-400 shadow-[0_0_18px_rgba(59,130,246,0.35)]"
+              style={{ width: `${tempoPercent * 100}%` }}
+            />
+            <input
+              type="range"
+              min="30"
+              max="300"
+              value={bpm}
+              onChange={(e) => handleBpmChange(Number(e.target.value))}
+              className="slider-thumb absolute inset-x-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent z-10"
+            />
+          </div>
           <div className="flex justify-between text-xs dark:text-gray-600 text-gray-600 mt-2">
             <span>30 BPM</span>
             <span>300 BPM</span>
+          </div>
+        </div>
+
+        {/* Volume Control */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <label className="text-base font-semibold dark:text-gray-300 text-gray-700">
+              Volume
+            </label>
+            <span className="text-sm font-bold dark:text-secondary-400 text-teal-400">
+              {Math.round(volume * 100)}%
+            </span>
+          </div>
+          <div className="relative h-10">
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-white/10" />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-gradient-to-r from-emerald-300 to-teal-400 shadow-[0_0_18px_rgba(16,185,129,0.35)]"
+              style={{ width: `${volumePercent * 100}%` }}
+            />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              className="slider-thumb absolute inset-x-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent z-10"
+            />
           </div>
         </div>
 
@@ -280,29 +378,37 @@ export const Metronome: React.FC<MetronomeProps> = ({
             ))}
           </div>
         </div>
-
-        {/* Volume Control */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <label className="text-base font-semibold dark:text-gray-300 text-gray-700">
-              Volume
-            </label>
-            <span className="text-sm font-bold dark:text-secondary-400 text-teal-600">
-              {Math.round(volume * 100)}%
-            </span>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-            className="w-full h-2"
-          />
-        </div>
       </div>
+
+      <style jsx global>{`
+        .slider-thumb::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 22px;
+          height: 22px;
+          border-radius: 9999px;
+          background: linear-gradient(135deg, #8b5cf6, #0ea5e9);
+          box-shadow: 0 8px 20px rgba(14, 165, 233, 0.45);
+          border: 2px solid rgba(255, 255, 255, 0.35);
+          cursor: pointer;
+          position: relative;
+        }
+        .slider-thumb::-moz-range-thumb {
+          width: 22px;
+          height: 22px;
+          border-radius: 9999px;
+          background: linear-gradient(135deg, #8b5cf6, #0ea5e9);
+          box-shadow: 0 8px 20px rgba(14, 165, 233, 0.45);
+          border: 2px solid rgba(255, 255, 255, 0.35);
+          cursor: pointer;
+        }
+        .slider-thumb::-webkit-slider-runnable-track {
+          height: 0;
+        }
+        .slider-thumb::-moz-range-track {
+          height: 0;
+        }
+      `}</style>
     </motion.div>
   );
 };
-

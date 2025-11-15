@@ -21,7 +21,12 @@ declare module 'react-piano' {
 
   export class MidiNumbers {
     static fromNote(note: string): number;
-    static toNote(midiNumber: number): string;
+    static getAttributes(midiNumber: number): {
+      note: string;
+      pitchName: string;
+      octave: number;
+      midiNumber: number;
+      isAccidental: boolean;
+    };
   }
 }
-

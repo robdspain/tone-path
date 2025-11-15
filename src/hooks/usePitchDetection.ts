@@ -68,7 +68,54 @@ function detectPitchAutocorrelation(buffer: Float32Array, sampleRate: number): n
   return null;
 }
 
-// CREPE model inference (simplified - actual CREPE requires specific preprocessing)
+const CREPE_FRAME_SIZE = 1024;
+const CREPE_SAMPLE_RATE = 16000;
+const CREPE_MIN_FREQUENCY = 50;
+const CREPE_MAX_FREQUENCY = 550;
+const CREPE_CONFIDENCE_THRESHOLD = 0.35;
+const CREPE_MODEL_URL = process.env.NEXT_PUBLIC_CREPE_MODEL_URL || '/models/crepe/model.json';
+
+function resampleForCrepe(buffer: Float32Array, sampleRate: number): Float32Array {
+  const resampled = new Float32Array(CREPE_FRAME_SIZE);
+  if (!buffer.length) return resampled;
+  const ratio = sampleRate / CREPE_SAMPLE_RATE;
+
+  for (let i = 0; i < CREPE_FRAME_SIZE; i++) {
+    const sourceIndex = i * ratio;
+    const baseIndex = Math.floor(sourceIndex);
+    const frac = sourceIndex - baseIndex;
+    const sampleA = buffer[Math.min(baseIndex, buffer.length - 1)];
+    const sampleB = buffer[Math.min(baseIndex + 1, buffer.length - 1)];
+    resampled[i] = sampleA + (sampleB - sampleA) * frac;
+  }
+
+  // Normalize (zero mean, unit variance)
+  let mean = 0;
+  for (let i = 0; i < CREPE_FRAME_SIZE; i++) {
+    mean += resampled[i];
+  }
+  mean /= CREPE_FRAME_SIZE;
+
+  let variance = 0;
+  for (let i = 0; i < CREPE_FRAME_SIZE; i++) {
+    const centered = resampled[i] - mean;
+    resampled[i] = centered;
+    variance += centered * centered;
+  }
+  const std = Math.sqrt(variance / CREPE_FRAME_SIZE) || 1;
+  for (let i = 0; i < CREPE_FRAME_SIZE; i++) {
+    resampled[i] = resampled[i] / std;
+  }
+
+  return resampled;
+}
+
+function crepeBinToFrequency(bin: number, totalBins: number): number {
+  const minLog = Math.log2(CREPE_MIN_FREQUENCY);
+  const range = Math.log2(CREPE_MAX_FREQUENCY) - minLog;
+  return Math.pow(2, minLog + (bin / Math.max(totalBins - 1, 1)) * range);
+}
+
 async function detectPitchCREPE(
   model: tf.LayersModel | null,
   buffer: Float32Array,
@@ -77,62 +124,42 @@ async function detectPitchCREPE(
   if (!model) return null;
 
   try {
-    // CREPE expects 1024-sample frames at 16kHz
-    // This is a simplified version - full implementation requires proper resampling and framing
-    const targetLength = 1024;
-    const targetSampleRate = 16000;
-    
-    // Simple resampling (linear interpolation)
-    const resampled: number[] = [];
-    const ratio = sampleRate / targetSampleRate;
-    for (let i = 0; i < targetLength; i++) {
-      const srcIndex = i * ratio;
-      const index = Math.floor(srcIndex);
-      const frac = srcIndex - index;
-      if (index + 1 < buffer.length) {
-        resampled.push(buffer[index] * (1 - frac) + buffer[index + 1] * frac);
-      } else {
-        resampled.push(buffer[Math.min(index, buffer.length - 1)]);
+    const frame = resampleForCrepe(buffer, sampleRate);
+
+    const confidences = tf.tidy(() => {
+      const input = tf.tensor(frame, [1, CREPE_FRAME_SIZE, 1], 'float32');
+      const prediction = model.predict(input) as tf.Tensor;
+      const data = prediction.dataSync();
+      tf.dispose([input, prediction]);
+      return Array.from(data);
+    });
+
+    let peakIndex = 0;
+    let peakConfidence = 0;
+
+    confidences.forEach((confidence, idx) => {
+      if (confidence > peakConfidence) {
+        peakConfidence = confidence;
+        peakIndex = idx;
+      }
+    });
+
+    if (peakConfidence < CREPE_CONFIDENCE_THRESHOLD) {
+      return null;
+    }
+
+    let weightedSum = 0;
+    let weightTotal = 0;
+    for (let offset = -2; offset <= 2; offset++) {
+      const idx = peakIndex + offset;
+      if (idx >= 0 && idx < confidences.length) {
+        const weight = confidences[idx];
+        weightTotal += weight;
+        weightedSum += weight * crepeBinToFrequency(idx, confidences.length);
       }
     }
 
-    // Normalize
-    const mean = resampled.reduce((a, b) => a + b, 0) / resampled.length;
-    const normalized = resampled.map((x) => x - mean);
-    const std = Math.sqrt(normalized.reduce((a, b) => a + b * b, 0) / normalized.length);
-    const final = normalized.map((x) => x / (std + 1e-10));
-
-    // Create tensor
-    const input = tf.tensor2d([final], [1, targetLength]);
-    
-    // Predict
-    const prediction = model.predict(input) as tf.Tensor;
-    const values = await prediction.data();
-    
-    // Cleanup
-    input.dispose();
-    prediction.dispose();
-
-    // CREPE outputs confidence per frequency bin
-    // Find peak frequency (simplified - actual CREPE has specific bin mapping)
-    let maxConfidence = 0;
-    let peakBin = 0;
-    for (let i = 0; i < values.length; i++) {
-      if (values[i] > maxConfidence) {
-        maxConfidence = values[i];
-        peakBin = i;
-      }
-    }
-
-    // Convert bin to frequency (CREPE covers 50-550 Hz typically)
-    if (maxConfidence > 0.5) {
-      const minFreq = 50;
-      const maxFreq = 550;
-      const frequency = minFreq + (peakBin / values.length) * (maxFreq - minFreq);
-      return frequency;
-    }
-
-    return null;
+    return weightTotal > 0 ? weightedSum / weightTotal : crepeBinToFrequency(peakIndex, confidences.length);
   } catch (error) {
     console.error('CREPE inference error:', error);
     return null;
@@ -153,28 +180,36 @@ export const usePitchDetection = (
 
   // Load CREPE model if requested
   useEffect(() => {
-    if (!useCREPE) {
-      setIsModelLoaded(true);
-      return;
-    }
-
-    let mounted = true;
+    let cancelled = false;
 
     const loadModel = async () => {
+      if (!useCREPE) {
+        if (modelRef.current) {
+          modelRef.current.dispose();
+          modelRef.current = null;
+        }
+        setIsModelLoaded(true);
+        return;
+      }
+
+      setIsModelLoaded(false);
+
       try {
-        // Note: CREPE model needs to be hosted or loaded from CDN
-        // For now, we'll use autocorrelation as fallback
-        // To use CREPE, host the model files and update this path:
-        // const model = await tf.loadLayersModel('/models/crepe/model.json');
-        // modelRef.current = model;
-        
-        // For now, mark as loaded but use autocorrelation
-        if (mounted) {
+        await tf.ready();
+        if (tf.findBackend('webgl') && tf.getBackend() !== 'webgl') {
+          await tf.setBackend('webgl');
+          await tf.ready();
+        }
+        const model = await tf.loadLayersModel(CREPE_MODEL_URL);
+        if (!cancelled) {
+          modelRef.current = model;
           setIsModelLoaded(true);
+        } else {
+          model.dispose();
         }
       } catch (error) {
-        console.warn('Failed to load CREPE model, using autocorrelation:', error);
-        if (mounted) {
+        console.warn('Failed to load CREPE model, falling back to autocorrelation:', error);
+        if (!cancelled) {
           setIsModelLoaded(true);
         }
       }
@@ -183,7 +218,7 @@ export const usePitchDetection = (
     loadModel();
 
     return () => {
-      mounted = false;
+      cancelled = true;
     };
   }, [useCREPE]);
 
